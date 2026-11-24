@@ -5,6 +5,8 @@ server-rendered HTML, no browser needed).
 """
 
 import re
+import sys
+import time
 import difflib
 from datetime import date, datetime
 
@@ -14,7 +16,10 @@ from playwright.sync_api import sync_playwright
 
 GMP_URL = "https://www.investorgain.com/report/live-ipo-gmp/331/ipo/"
 CHITTORGARH_LIST_URL = "https://www.chittorgarh.com/ipo/"
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; ipo-bot/1.0)"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 STATUS_CODES = ["CT", "LT", "U", "O", "C", "L"]  # longest first for matching
 MONTHS = {
@@ -38,14 +43,34 @@ def _split_name_status(raw):
 
 
 def _parse_money(text):
-    """'₹30 (20.00%)' -> (30.0, 20.0); '₹-- (0.00%)' -> (None, 0.0)"""
-    m = re.search(r"₹([\d,.\-]+|--)\s*\(([\-\d.]+)%\)", text)
-    if not m:
+    """
+    Parses '₹30 (20.00%)' -> (30.0, 20.0); '₹23 (-%)' -> (23.0, None);
+    '₹-- (0.00%)' -> (None, 0.0); '₹-- (-%)' -> (None, None)
+    """
+    if not text:
         return None, None
-    raw_val, pct = m.group(1), float(m.group(2))
-    if raw_val == "--":
-        return None, pct
-    return float(raw_val.replace(",", "")), pct
+    m = re.search(r"[₹\u20b9â‚¹]?\s*([\d,.\-]+|--)\s*\(([\-\d.]+|--|-)\s*%\)", text)
+    if not m:
+        val_m = re.search(r"[₹\u20b9â‚¹]?\s*([\d,.]+)", text)
+        val = float(val_m.group(1).replace(",", "")) if val_m else None
+        return val, None
+    raw_val, raw_pct = m.group(1).strip(), m.group(2).strip()
+
+    val = None
+    if raw_val not in ("--", "-", ""):
+        try:
+            val = float(raw_val.replace(",", ""))
+        except ValueError:
+            val = None
+
+    pct = None
+    if raw_pct not in ("--", "-", ""):
+        try:
+            pct = float(raw_pct)
+        except ValueError:
+            pct = None
+
+    return val, pct
 
 
 def _parse_date_cell(text, today):
@@ -72,17 +97,31 @@ def _parse_date_cell(text, today):
 def scrape_gmp_list(today=None):
     """Returns list of dicts for ALL IPOs (mainboard + SME) from investorgain."""
     today = today or date.today()
+    raw_rows = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page(user_agent=HEADERS["User-Agent"])
-        page.goto(GMP_URL, wait_until="networkidle", timeout=60000)
-        page.wait_for_selector("table tbody tr", timeout=30000)
-        rows = page.query_selector_all("table tbody tr")
-        raw_rows = []
-        for row in rows:
-            cells = [c.inner_text() for c in row.query_selector_all("td")]
-            if len(cells) >= 11:
-                raw_rows.append(cells)
+        context = browser.new_context(
+            user_agent=HEADERS["User-Agent"],
+            viewport={"width": 1280, "height": 800}
+        )
+        page = context.new_page()
+
+        for attempt in range(1, 4):
+            try:
+                page.goto(GMP_URL, wait_until="domcontentloaded", timeout=45000)
+                page.wait_for_selector("table tbody tr, table tr", timeout=30000)
+                rows = page.query_selector_all("table tbody tr")
+                if not rows:
+                    rows = page.query_selector_all("table tr")
+                for row in rows:
+                    cells = [c.inner_text().strip() for c in row.query_selector_all("td")]
+                    if len(cells) >= 11:
+                        raw_rows.append(cells)
+                if raw_rows:
+                    break
+            except Exception as exc:
+                print(f"Warning: scrape attempt {attempt} failed ({exc}). Retrying...", file=sys.stderr)
+                time.sleep(2 * attempt)
         browser.close()
 
     results = []
