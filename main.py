@@ -8,6 +8,7 @@ Daily IPO tracker run:
 
 import os
 import sys
+import shutil
 from datetime import date
 
 from ipo_bot.scrape import (
@@ -72,6 +73,8 @@ def main():
     records = build_records()
 
     os.makedirs("docs", exist_ok=True)
+    if os.path.exists("sample_data"):
+        shutil.copytree("sample_data", "docs/sample_data", dirs_exist_ok=True)
     html_out = render_site(records)
     with open("docs/index.html", "w", encoding="utf-8") as f:
         f.write(html_out)

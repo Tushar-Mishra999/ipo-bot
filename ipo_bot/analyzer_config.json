@@ -1,0 +1,185 @@
+{
+  "weights": {
+    "earnings_quality": 0.25,
+    "forensic_risk": 0.20,
+    "financial_strength": 0.20,
+    "profitability_growth": 0.20,
+    "cash_allocation": 0.15
+  },
+  "verdict_thresholds": {
+    "invest": 75,
+    "watchlist": 55
+  },
+  "overrides": {
+    "beneish_max": -1.78,
+    "altman_min": 1.1,
+    "cum_cfo_pat_min": 0.5
+  },
+  "pillars": {
+    "earnings_quality": {
+      "name": "Earnings Quality",
+      "weight": 0.25,
+      "metrics": {
+        "cum_cfo_pat": {
+          "label": "Cumulative CFO / PAT",
+          "bad": 0.5,
+          "good": 1.0,
+          "higher_is_better": true,
+          "format": "ratio",
+          "strength_template": "Robust cash conversion: Cumulative CFO is {value:.2f}x of reported PAT, demonstrating real cash backing behind profits.",
+          "red_flag_template": "Poor cash generation: Cumulative CFO is only {value:.2f}x of PAT (below 0.50x threshold), signalling paper accounting profits."
+        },
+        "accruals_ratio": {
+          "label": "Accruals Ratio ((PAT - CFO) / Total Assets)",
+          "bad": 0.10,
+          "good": -0.05,
+          "higher_is_better": false,
+          "format": "pct",
+          "strength_template": "Conservative accounting: Low accruals ratio of {value:.1%}, meaning earnings are fully supported by cash flows.",
+          "red_flag_template": "High accruals risk: Accruals ratio of {value:.1%} indicates substantial non-cash earnings and aggressive revenue recognition."
+        }
+      }
+    },
+    "forensic_risk": {
+      "name": "Forensic Risk",
+      "weight": 0.20,
+      "metrics": {
+        "beneish_m_score": {
+          "label": "Beneish M-Score",
+          "bad": -1.78,
+          "good": -2.5,
+          "higher_is_better": false,
+          "format": "score",
+          "strength_template": "Clean forensic profile: Beneish M-Score of {value:.2f} (well below -2.50) indicates negligible risk of earnings manipulation.",
+          "red_flag_template": "Earnings manipulation alert: Beneish M-Score of {value:.2f} exceeds -1.78 threshold, flagging significant financial tampering risks."
+        },
+        "chg_receivable_days_2y": {
+          "label": "Change in Receivable Days (2-Year)",
+          "bad": 15.0,
+          "good": 0.0,
+          "higher_is_better": false,
+          "format": "days",
+          "strength_template": "Disciplined collections: Debtor days improved/stable by {value:+.1f} days over the last 2 years.",
+          "red_flag_template": "Stretching receivables: Debtor days lengthened by {value:+.1f} days over 2 years, tying up capital and raising collection risks."
+        },
+        "other_income_share_pbt": {
+          "label": "Other Income as % of PBT",
+          "bad": 0.30,
+          "good": 0.05,
+          "higher_is_better": false,
+          "format": "pct",
+          "strength_template": "High core earnings purity: Other income accounts for just {value:.1%} of pre-tax profit.",
+          "red_flag_template": "Inflated by non-operating income: Other income forms {value:.1%} of PBT, masking weakness in the core operational business."
+        }
+      }
+    },
+    "financial_strength": {
+      "name": "Financial Strength",
+      "weight": 0.20,
+      "metrics": {
+        "altman_z_score": {
+          "label": "Altman Z'' Score",
+          "bad": 1.1,
+          "good": 2.6,
+          "higher_is_better": true,
+          "format": "score",
+          "strength_template": "Rock-solid solvency: Altman Z'' score of {value:.2f} places the company firmly in the safe zone against financial distress.",
+          "red_flag_template": "Distress zone warning: Altman Z'' score of {value:.2f} is under 1.1, signalling balance sheet vulnerability and default risk."
+        },
+        "interest_cover": {
+          "label": "Interest Coverage Ratio",
+          "bad": 1.5,
+          "good": 5.0,
+          "higher_is_better": true,
+          "format": "ratio",
+          "strength_template": "Comfortable debt servicing: Strong interest coverage of {value:.1f}x operating profit relative to finance costs.",
+          "red_flag_template": "Tense debt servicing: Interest cover of {value:.1f}x offers thin cushion against rising interest rates or operational downturns."
+        },
+        "debt_to_equity": {
+          "label": "Debt to Equity Ratio",
+          "bad": 1.5,
+          "good": 0.3,
+          "higher_is_better": false,
+          "format": "ratio",
+          "strength_template": "Conservative leverage: Prudent Debt/Equity ratio of {value:.2f} gives ample balance sheet headroom.",
+          "red_flag_template": "Heavily leveraged: High Debt/Equity ratio of {value:.2f} elevates financial leverage and bankruptcy risk."
+        }
+      }
+    },
+    "profitability_growth": {
+      "name": "Profitability and Growth",
+      "weight": 0.20,
+      "metrics": {
+        "sales_cagr": {
+          "label": "Sales CAGR",
+          "bad": 0.05,
+          "good": 0.20,
+          "higher_is_better": true,
+          "format": "pct",
+          "strength_template": "Rapid top-line expansion: Strong revenue CAGR of {value:.1%} reflecting robust industry demand.",
+          "red_flag_template": "Sluggish top-line growth: Revenue CAGR of only {value:.1%} trails healthy expansion benchmarks."
+        },
+        "pat_cagr": {
+          "label": "PAT CAGR",
+          "bad": 0.05,
+          "good": 0.20,
+          "higher_is_better": true,
+          "format": "pct",
+          "strength_template": "Powerful bottom-line compounding: Net profit CAGR of {value:.1%} demonstrating strong operating leverage.",
+          "red_flag_template": "Weak or negative profit trajectory: PAT CAGR of {value:.1%} shows declining profitability."
+        },
+        "roe": {
+          "label": "Return on Equity (ROE)",
+          "bad": 0.10,
+          "good": 0.20,
+          "higher_is_better": true,
+          "format": "pct",
+          "strength_template": "Superior shareholder returns: High ROE of {value:.1%} creating significant shareholder value.",
+          "red_flag_template": "Sub-par capital efficiency: Tepid ROE of {value:.1%} fails to clear standard hurdle rates."
+        },
+        "ebitda_margin_trend": {
+          "label": "EBITDA Margin Trend (2-Year)",
+          "bad": -0.02,
+          "good": 0.02,
+          "higher_is_better": true,
+          "format": "pct",
+          "strength_template": "Expanding pricing power: Operating/EBITDA margins expanded by {value:+.1%} over recent years.",
+          "red_flag_template": "Margin compression: EBITDA margins contracted by {value:+.1%}, indicating input cost pressures or loss of pricing power."
+        }
+      }
+    },
+    "cash_allocation": {
+      "name": "Cash and Capital Allocation",
+      "weight": 0.15,
+      "metrics": {
+        "fcf_to_pat": {
+          "label": "FCF Proxy relative to PAT",
+          "bad": 0.20,
+          "good": 0.80,
+          "higher_is_better": true,
+          "format": "ratio",
+          "strength_template": "True cash compounder: High free cash flow conversion ({value:.2f}x PAT) after funding capex and CWIP additions.",
+          "red_flag_template": "Capex cash burn: FCF proxy is only {value:.2f}x of PAT due to heavy capital expenditure or CWIP accumulation."
+        },
+        "div_payout_vs_cfo": {
+          "label": "Dividend Payout vs Cash Generated",
+          "bad": 0.80,
+          "good": 0.20,
+          "higher_is_better": false,
+          "format": "pct",
+          "strength_template": "Sustainable capital returns: Dividends consume a prudent {value:.1%} of operating cash flows.",
+          "red_flag_template": "Aggressive dividend distribution: Dividends devour {value:.1%} of operating cash flows, limiting internal reinvestment."
+        },
+        "cash_vs_borrowings": {
+          "label": "Cash vs Borrowings",
+          "bad": 0.20,
+          "good": 1.0,
+          "higher_is_better": true,
+          "format": "ratio",
+          "strength_template": "Substantial liquidity cushion: Liquid cash covers {value:.2f}x of total borrowings.",
+          "red_flag_template": "Low cash liquidity: Cash covers only {value:.2f}x of total borrowings, posing liquidity risks in credit squeezes."
+        }
+      }
+    }
+  }
+}
