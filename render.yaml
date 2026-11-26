@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ipo-analysis-api
+    runtime: docker
+    rootDir: ai-service
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GOOGLE_CLOUD_PROJECT
+        value: gen-lang-client-0110712675
+      - key: GOOGLE_CLOUD_LOCATION
+        value: us-central1
+      - key: IPO_DASHBOARD_ORIGIN
+        value: https://tushar-mishra999.github.io
+      - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
+        sync: false
