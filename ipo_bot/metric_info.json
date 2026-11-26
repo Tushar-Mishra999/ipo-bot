@@ -1,0 +1,28 @@
+{
+  "pillars": {
+    "Earnings Quality": {"description": "Are the reported profits backed by real cash?", "high": "Profits convert into cash", "low": "Profits may be on paper only"},
+    "Forensic Risk": {"description": "Warning signs of aggressive or manipulated accounting.", "high": "Few red flags", "low": "Several red flags"},
+    "Financial Strength": {"description": "Can the company handle downturns and repay its debts?", "high": "Low distress risk", "low": "Weak balance sheet"},
+    "Profitability and Growth": {"description": "How fast the company is growing and how well it earns on shareholders' money.", "high": "Strong, steady growth", "low": "Slow or falling profits"},
+    "Cash and Capital Allocation": {"description": "How much free cash remains after investing, and how it is used.", "high": "Surplus cash, sensible payouts", "low": "Cash is tight or over-distributed"}
+  },
+  "composite": {"description": "Weighted blend of the five pillar scores ({weights}) that drives the verdict.", "good": "{value}+ Invest", "watch": "Below {value} Avoid"},
+  "coverage": {"description": "Share of this pillar's metrics that could be calculated from the uploaded file.", "high": "100% = full picture", "low": "Low = score rests on little data"},
+  "metrics": {
+    "CFO / PAT": {"description": "Cash from operations for every ₹1 of reported profit.", "format": "ratio", "good": "{value} or more", "watch": "Below {value}"},
+    "Accruals": {"description": "Gap between profit and operating cash, as a share of total assets.", "format": "percent", "good": "{value} or less: profit is backed by cash", "watch": "Above {value}: profit relies on non-cash items"},
+    "Beneish M-Score": {"description": "Statistical score estimating the likelihood of earnings manipulation; a warning signal, not proof.", "format": "decimal", "good": "Below {value}", "watch": "Above {value}"},
+    "Receivable days change": {"description": "Change in how many days customers take to pay.", "format": "percent", "good": "{value} or less: flat or falling", "watch": "Up {value} or more: sales may be booked but not collected"},
+    "Other income share": {"description": "Part of pre-tax profit from non-core income such as interest or one-offs.", "format": "percent", "good": "Below {value}", "watch": "Above {value}: core earnings may be weaker"},
+    "Altman Z''": {"description": "Distress score blending liquidity, reserves, earnings and leverage.", "format": "decimal", "good": "Above {value}", "watch": "Below {value}"},
+    "Interest cover": {"description": "How many times operating earnings cover interest payments.", "format": "multiple", "good": "{value} or more", "watch": "Below {value}"},
+    "Debt / Equity": {"description": "Borrowings for every ₹1 of shareholders' funds.", "format": "ratio", "good": "{value} or less", "watch": "{value} or more"},
+    "Sales CAGR": {"description": "Average yearly sales growth over the period available.", "format": "percent", "good": "{value} or more", "watch": "{value} or less"},
+    "PAT CAGR": {"description": "Average yearly profit growth over the period available.", "format": "percent", "good": "{value} or more", "watch": "{value} or less"},
+    "ROE": {"description": "Profit earned on every ₹100 of shareholders' money.", "format": "percent", "good": "{value} or more", "watch": "Below {value}"},
+    "EBITDA margin trend": {"description": "Change in operating margin across the period, in percentage points.", "format": "points", "good": "Rising by {value} or more", "watch": "Falling by {value} or more"},
+    "FCF / PAT": {"description": "Free cash flow (operating cash minus estimated capex) as a share of profit.", "format": "ratio", "good": "{value} or more", "watch": "{value} or below"},
+    "Dividend payout vs cash": {"description": "Share of operating cash paid out as dividends.", "format": "percent", "good": "{value}: comfortably covered by cash", "watch": "{value} or more: payout nears or exceeds cash generated"},
+    "Cash / Borrowings": {"description": "Cash balance for every ₹1 of debt.", "format": "ratio", "good": "{value} or more", "watch": "{value} or less"}
+  }
+}

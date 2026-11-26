@@ -33,7 +33,9 @@ reads the `Data Sheet` tab and calculates five pillar scores, data coverage, a c
 score, and a verdict. Missing metrics are skipped. The uploaded workbook is processed
 locally in the browser. The complete analysis appears after the AI explanation returns.
 Scoring thresholds and weights are in
-`ipo_bot/analyzer_config.json`.
+`ipo_bot/analyzer_config.json`. The info tooltips are defined in
+`ipo_bot/metric_info.json`; their numeric Good and Watch levels are read from
+the scoring config at display time.
 
 The optional AI explanation service lives in `ai-service/`. It uses the same
 `@google/genai` Vertex AI pattern as `project-s` and needs

@@ -93,7 +93,7 @@ function calculate(parsed) {
   const fcf = difference(latest('cfo'), capex);
   metrics['FCF / PAT'] = latest('pat') > 0 ? divide(fcf, latest('pat')) : null;
   metrics['Dividend payout vs cash'] = latest('cfo') > 0 && latest('dividend') != null ?
-    Math.max(0, 1 - latest('dividend') / latest('cfo')) : null;
+    divide(latest('dividend'), latest('cfo')) : null;
   metrics['Cash / Borrowings'] = divide(latest('cash'), latest('borrowings'));
   if (n > 1) {
     const dsri = divide(divide(latest('receivables'), latest('sales')), divide(previous('receivables'), previous('sales')));
@@ -141,6 +141,27 @@ function score(result, config) {
 }
 
 const escapeHtml = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const formatMetric = (value, format) => {
+  if (value == null) return '—';
+  if (format === 'percent') return `${(value * 100).toFixed(1).replace(/\.0$/, '')}%`;
+  if (format === 'points') return `${(value * 100).toFixed(1).replace(/\.0$/, '')} pp`;
+  if (format === 'multiple') return `${Number(value.toFixed(2))}x`;
+  return String(Number(value.toFixed(format === 'decimal' ? 2 : 3)));
+};
+let infoSequence = 0;
+function infoIcon(title, lines) {
+  const id = `metric-tip-${++infoSequence}`;
+  const content = lines.filter(Boolean).map(line => `<span>${escapeHtml(line)}</span>`).join('');
+  return `<span class="info-wrap"><button type="button" class="info-icon" aria-label="About ${escapeHtml(title)}" aria-describedby="${id}">i</button><span class="info-tip" id="${id}" role="tooltip">${content}</span></span>`;
+}
+function metricTip(name, info, config) {
+  const text = info.metrics[name];
+  const thresholds = Object.values(config.pillars).map(p => p.metrics[name]).find(Boolean);
+  if (!text || !thresholds) return '';
+  const [bad, good] = thresholds;
+  const value = number => formatMetric(name === 'EBITDA margin trend' && number < 0 ? -number : number, text.format);
+  return infoIcon(name, [text.description, `Good: ${text.good.replace('{value}', value(good))}`, `Watch: ${text.watch.replace('{value}', value(bad))}`]);
+}
 function trendChart(years, sales, profit) {
   const width = 620, height = 285, left = 58, right = 58, top = 30, bottom = 45;
   const plotWidth = width-left-right, plotHeight = height-top-bottom;
@@ -195,14 +216,16 @@ async function loadExplanation(company, result, scores) {
     return error.message;
   }
 }
-function render(parsed, result, scores, company, explanation) {
+function render(parsed, result, scores, company, explanation, config, info) {
   const {pillars, composite, verdict, coverage} = scores;
-  const bars = pillars.map(p => `<div class="pillar"><div><strong>${escapeHtml(p.name)}</strong><small>Coverage ${p.coverage}%</small></div><div class="track"><span style="width:${p.score ?? 0}%"></span></div><b>${p.score == null ? '—' : Math.round(p.score)}</b></div>`).join('');
-  const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(item.metric)}</td><td>${item.value == null ? '—' : Number(item.value.toFixed(3))}</td><td class="${scoreColor(item.points)}">${item.points == null ? 'Skipped' : Math.round(item.points)+'/100'}</td></tr>`)).join('');
+  const bars = pillars.map(p => `<div class="pillar"><div><strong>${escapeHtml(p.name)}</strong>${infoIcon(p.name, [info.pillars[p.name]?.description, `High score: ${info.pillars[p.name]?.high}`, `Low score: ${info.pillars[p.name]?.low}`])}<small>Coverage ${p.coverage}% ${infoIcon('Coverage', [info.coverage.description, info.coverage.high, info.coverage.low])}</small></div><div class="track"><span style="width:${p.score ?? 0}%"></span></div><b>${p.score == null ? '—' : Math.round(p.score)}</b></div>`).join('');
+  const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(item.metric)} ${metricTip(item.metric, info, config)}</td><td>${formatMetric(item.value, info.metrics[item.metric]?.format)}</td><td class="${scoreColor(item.points)}">${item.points == null ? 'Skipped' : Math.round(item.points)+'/100'}</td></tr>`)).join('');
+  const weights = Object.values(config.pillars).map(p => `${Math.round(p.weight*100)}%`).join('/');
+  const compositeTip = infoIcon('Composite Score', [info.composite.description.replace('{weights}', weights), `Good: ${info.composite.good.replace('{value}', config.verdict.invest)}`, `Watch: ${info.composite.watch.replace('{value}', config.verdict.watchlist)}`]);
   const sales = parsed.data.sales, pat = parsed.data.pat;
   const trends = trendChart(parsed.years, sales, pat);
   $('analysis').innerHTML = `<div class="analysis-head"><h2>${escapeHtml(company)} — IPO Analysis</h2><span>${escapeHtml(parsed.years[0])}–${escapeHtml(parsed.years.at(-1))} · ${parsed.years.length} years</span></div>
-    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score</small><small>${coverage}% data coverage</small></div></div><section class="ai-card"><h3>AI Analysis</h3><p id="ai-explanation">${escapeHtml(explanation)}</p></section></div><div class="pillars pillar-grid">${bars}</div>
+    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score ${compositeTip}</small><small>${coverage}% data coverage ${infoIcon('Coverage', [info.coverage.description, info.coverage.high, info.coverage.low])}</small></div></div><section class="ai-card"><h3>AI Analysis</h3><p id="ai-explanation">${escapeHtml(explanation)}</p></section></div><div class="pillars pillar-grid">${bars}</div>
     <div class="detail-grid"><section><h3>Key Financial Trends</h3>${trends}</section>
     <section><h3>Forensic & Quality Checks</h3><table><thead><tr><th>Metric</th><th>Value</th><th>Score</th></tr></thead><tbody>${checks}</tbody></table>${result.lossMaking ? '<p class="warning">Loss making year found. CFO / PAT excludes years with zero or negative PAT.</p>' : ''}</section></div>`;
   $('analysis').hidden = false;
@@ -211,6 +234,10 @@ function render(parsed, result, scores, company, explanation) {
 
 const configPromise = fetch('analyzer_config.json').then(response => {
   if (!response.ok) throw new Error('Analysis configuration could not be loaded.');
+  return response.json();
+});
+const infoPromise = fetch('metric_info.json').then(response => {
+  if (!response.ok) throw new Error('Metric information could not be loaded.');
   return response.json();
 });
 $('upload').addEventListener('change', async event => {
@@ -232,7 +259,7 @@ $('upload').addEventListener('change', async event => {
     const scores = score(result, await configPromise);
     const company = $('company').value || file.name.replace(/\.xlsx?$/i,'');
     const explanation = await loadExplanation(company, result, scores);
-    render(parsed, result, scores, company, explanation);
+    render(parsed, result, scores, company, explanation, await configPromise, await infoPromise);
     $('upload-status').textContent = `${file.name} analyzed in this browser.`;
   } catch (error) {
     $('upload-status').textContent = error.message;

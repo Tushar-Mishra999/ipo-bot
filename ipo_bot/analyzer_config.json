@@ -4,7 +4,7 @@
     "Forensic Risk": {"weight": 0.20, "metrics": {"Beneish M-Score": [-1.78, -2.5], "Receivable days change": [0.30, 0], "Other income share": [0.40, 0.10]}},
     "Financial Strength": {"weight": 0.20, "metrics": {"Altman Z''": [1.1, 2.6], "Interest cover": [1.5, 5], "Debt / Equity": [1.5, 0.3]}},
     "Profitability and Growth": {"weight": 0.20, "metrics": {"Sales CAGR": [0, 0.15], "PAT CAGR": [0, 0.15], "ROE": [0.05, 0.18], "EBITDA margin trend": [-0.03, 0.02]}},
-    "Cash and Capital Allocation": {"weight": 0.15, "metrics": {"FCF / PAT": [0, 0.8], "Dividend payout vs cash": [0, 1], "Cash / Borrowings": [0.1, 1]}}
+    "Cash and Capital Allocation": {"weight": 0.15, "metrics": {"FCF / PAT": [0, 0.8], "Dividend payout vs cash": [1, 0], "Cash / Borrowings": [0.1, 1]}}
   },
   "verdict": {"invest": 75, "watchlist": 55},
   "caps": {"Beneish M-Score": -1.78, "Altman Z''": 1.1, "CFO / PAT": 0.5}
