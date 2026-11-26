@@ -37,7 +37,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           SITE_URL: ${{ vars.SITE_URL }}
-          ANALYSIS_API_URL: ${{ vars.ANALYSIS_API_URL }}
+          ANALYSIS_API_URL: https://ipo-bot-memn.onrender.com
         run: python main.py
 
       - name: Upload Pages artifact
