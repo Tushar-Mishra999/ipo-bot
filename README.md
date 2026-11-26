@@ -14,6 +14,10 @@ no server needed.
    - [investorgain.com](https://www.investorgain.com/report/live-ipo-gmp/331/ipo/) for the mainboard IPO list, GMP, and open/close/listing dates.
    - [chittorgarh.com](https://www.chittorgarh.com/ipo/) for each company's financial statements and KPIs (RoNW, PAT margin, EBITDA margin, NAV, P/B, revenue, profit, net worth, etc.)
 2. It builds a static website (`docs/index.html`) and publishes it to **GitHub Pages**.
+   The build also fetches Nifty 50 and Sensex snapshots from Google Finance and
+   Gold 999 (₹/10 g) and Silver 999 (₹/kg) benchmark rates from IBJA. The market
+   strip shows the source and fetch time; quotes can be delayed, and missing
+   quotes appear as unavailable rather than reusing old values.
 3. For any IPO whose subscription opens or closes *today*, it emails a summary (GMP + financials) to the configured recipients.
 
 The dashboard includes a **Refresh data** control. The Render service starts the
