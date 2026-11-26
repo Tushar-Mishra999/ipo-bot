@@ -16,9 +16,10 @@ no server needed.
 2. It builds a static website (`docs/index.html`) and publishes it to **GitHub Pages**.
 3. For any IPO whose subscription opens or closes *today*, it emails a summary (GMP + financials) to the configured recipients.
 
-The dashboard includes a **Manual refresh** control. It opens the GitHub Actions workflow,
-where a repository collaborator can select **Run workflow**. The daily schedule continues
-to run at 03:00 UTC.
+The dashboard includes a **Refresh data** control. On first use, it asks for a GitHub
+fine-grained token with Actions read/write access to this repository. The token is kept
+in browser session storage, and the dashboard starts and monitors the workflow without
+leaving the page. The daily schedule continues to run at 03:00 UTC.
 
 For an open IPO, choose **Analyze** and upload its Screener.in Excel export. The browser
 reads the `Data Sheet` tab and calculates five pillar scores, data coverage, a composite

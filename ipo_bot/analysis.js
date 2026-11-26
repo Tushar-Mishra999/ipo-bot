@@ -141,15 +141,44 @@ function score(result, config) {
 }
 
 const escapeHtml = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function trendChart(years, sales, profit) {
+  const width = 620, height = 285, left = 55, right = 20, top = 25, bottom = 45;
+  const plotWidth = width-left-right, plotHeight = height-top-bottom;
+  const values = [...sales, ...profit].filter(v => v != null);
+  if (!values.length) return '<p>No sales or profit data available.</p>';
+  const max = Math.max(1, ...values) * 1.12;
+  const min = Math.min(0, ...values);
+  const range = max - min;
+  const y = value => top + (max-value)/range*plotHeight;
+  const x = i => left + (i+0.5)*plotWidth/years.length;
+  const baseline = y(0);
+  const ticks = Array.from({length: 5}, (_,i) => min+(max-min)*i/4).map(value =>
+    `<line x1="${left}" x2="${width-right}" y1="${y(value)}" y2="${y(value)}" stroke="#364064" stroke-dasharray="4 5"/><text x="${left-8}" y="${y(value)+4}" text-anchor="end" fill="#aeb6d6" font-size="11">${Math.round(value).toLocaleString()}</text>`).join('');
+  const bars = sales.map((value,i) => value == null ? '' :
+    `<rect x="${x(i)-Math.min(25,plotWidth/years.length*0.34)}" y="${Math.min(y(value),baseline)}" width="${Math.min(50,plotWidth/years.length*0.68)}" height="${Math.max(1,Math.abs(baseline-y(value)))}" rx="5" fill="url(#salesGradient)"><title>${escapeHtml(years[i])} sales: ${value.toLocaleString()}</title></rect>`).join('');
+  const segments = [];
+  for (let i=1;i<profit.length;i++) if (profit[i-1] != null && profit[i] != null)
+    segments.push(`<line x1="${x(i-1)}" y1="${y(profit[i-1])}" x2="${x(i)}" y2="${y(profit[i])}" stroke="#72f6a1" stroke-width="3"/>`);
+  const points = profit.map((value,i) => value == null ? '' :
+    `<circle cx="${x(i)}" cy="${y(value)}" r="5" fill="#72f6a1" stroke="#17213d" stroke-width="2"><title>${escapeHtml(years[i])} profit: ${value.toLocaleString()}</title></circle>`).join('');
+  const labels = years.map((year,i) => `<text x="${x(i)}" y="${height-12}" text-anchor="middle" fill="#c6c9e1" font-size="11">${escapeHtml(year)}</text>`).join('');
+  return `<div class="chart-legend"><span class="sales-dot"></span>Sales <span class="profit-dot"></span>Net profit</div><svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Sales bars and net profit line by year"><defs><linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#aa71ff"/><stop offset="1" stop-color="#6d48d3"/></linearGradient></defs>${ticks}${bars}${segments.join('')}${points}${labels}</svg>`;
+}
+function scoreColor(points) {
+  if (points == null) return 'muted';
+  if (points >= 75) return 'good';
+  if (points >= 40) return 'caution';
+  return 'bad';
+}
 function render(parsed, result, scores, company) {
   const {pillars, composite, verdict, coverage} = scores;
   const bars = pillars.map(p => `<div class="pillar"><div><strong>${escapeHtml(p.name)}</strong><small>Coverage ${p.coverage}%</small></div><div class="track"><span style="width:${p.score ?? 0}%"></span></div><b>${p.score == null ? '—' : Math.round(p.score)}</b></div>`).join('');
-  const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(item.metric)}</td><td>${item.value == null ? '—' : Number(item.value.toFixed(3))}</td><td>${item.points == null ? 'Skipped' : Math.round(item.points)+'/100'}</td></tr>`)).join('');
+  const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(item.metric)}</td><td>${item.value == null ? '—' : Number(item.value.toFixed(3))}</td><td class="${scoreColor(item.points)}">${item.points == null ? 'Skipped' : Math.round(item.points)+'/100'}</td></tr>`)).join('');
   const sales = parsed.data.sales, pat = parsed.data.pat;
-  const trends = parsed.years.map((year, i) => `<tr><td>${escapeHtml(year)}</td><td>${sales[i] ?? '—'}</td><td>${pat[i] ?? '—'}</td></tr>`).join('');
+  const trends = trendChart(parsed.years, sales, pat);
   $('analysis').innerHTML = `<div class="analysis-head"><h2>${escapeHtml(company)} — IPO Analysis</h2><span>${escapeHtml(parsed.years[0])}–${escapeHtml(parsed.years.at(-1))} · ${parsed.years.length} years</span></div>
-    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong><span>${composite == null ? '—' : Math.round(composite)} / 100 composite score · ${coverage}% data coverage</span></div><div class="pillars">${bars}</div></div>
-    <div class="detail-grid"><section><h3>Key Financial Trends</h3><table><thead><tr><th>Year</th><th>Sales</th><th>Net profit</th></tr></thead><tbody>${trends}</tbody></table></section>
+    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score</small><small>${coverage}% data coverage</small></div></div><div class="pillars">${bars}</div></div>
+    <div class="detail-grid"><section><h3>Key Financial Trends</h3>${trends}</section>
     <section><h3>Forensic & Quality Checks</h3><table><thead><tr><th>Metric</th><th>Value</th><th>Score</th></tr></thead><tbody>${checks}</tbody></table>${result.lossMaking ? '<p class="warning">Loss making year found. CFO / PAT excludes years with zero or negative PAT.</p>' : ''}</section></div>`;
   $('analysis').hidden = false;
   $('analysis').scrollIntoView({behavior:'smooth', block:'start'});

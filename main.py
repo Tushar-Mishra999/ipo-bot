@@ -76,7 +76,7 @@ def main():
     html_out = render_site(records)
     with open("docs/index.html", "w", encoding="utf-8") as f:
         f.write(html_out)
-    for asset in ("analysis.js", "analyzer_config.json"):
+    for asset in ("analysis.js", "refresh.js", "analyzer_config.json"):
         shutil.copyfile(os.path.join("ipo_bot", asset), os.path.join("docs", asset))
     print("Wrote docs/index.html")
 
