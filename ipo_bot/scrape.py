@@ -1,5 +1,5 @@
 """
-Scraping for mainboard IPOs: list + GMP from investorgain.com (JS-rendered,
+Scraping for mainboard and SME IPOs: list + GMP from investorgain.com (JS-rendered,
 needs Playwright), and per-company financials from chittorgarh.com (plain
 server-rendered HTML, no browser needed).
 """

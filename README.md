@@ -1,7 +1,7 @@
-# Mainboard IPO Tracker
+# IPO Tracker
 
-A daily-refreshing website of all open/upcoming/recently-closed **mainboard**
-IPOs (SME IPOs excluded), each with GMP (grey market premium) and ~10 company
+A daily-refreshing website of open/upcoming/recently-closed **mainboard and SME**
+IPOs, each with GMP (grey market premium) and ~10 company
 financial/KPI metrics, plus an email alert on the day a company's IPO
 subscription **opens** and again the day it **closes**.
 
@@ -11,7 +11,7 @@ no server needed.
 ## How it works
 
 1. Once a day, a GitHub Actions workflow scrapes:
-   - [investorgain.com](https://www.investorgain.com/report/live-ipo-gmp/331/ipo/) for the mainboard IPO list, GMP, and open/close/listing dates.
+   - [investorgain.com](https://www.investorgain.com/report/live-ipo-gmp/331/ipo/) for mainboard and SME IPO lists, GMP, and open/close/listing dates.
    - [chittorgarh.com](https://www.chittorgarh.com/ipo/) for each company's financial statements and KPIs (RoNW, PAT margin, EBITDA margin, NAV, P/B, revenue, profit, net worth, etc.)
 2. It builds a static website (`docs/index.html`) and publishes it to **GitHub Pages**.
    The build also fetches Nifty 50 and Sensex snapshots from Google Finance and
@@ -68,6 +68,6 @@ Settings → Pages → Build and deployment → Source → **GitHub Actions**.
 Actions tab → "IPO Tracker" → Run workflow (or wait for the daily 03:00 UTC / 08:30 AM IST run).
 
 ## Notes
-- "Small companies" are excluded by only scraping the mainboard IPO list — SME/NSE Emerge/BSE SME platform IPOs are never included.
+- SME IPOs are included and labeled in the dashboard. Chittorgarh's mainboard listing may not provide matching financial KPIs for every SME; those fields remain empty when unavailable.
 - GMP scraping uses a headless browser (Playwright/Chromium) since investorgain.com renders its table client-side; this adds ~30-60s per run, still well within GitHub's free Actions minutes for one run a day.
 - Scraping depends on the structure of two third-party sites; if either changes its layout, the relevant scraper in `ipo_bot/scrape.py` may need updating.

@@ -1,6 +1,6 @@
 """
 Daily IPO tracker run:
-  1. Scrape mainboard IPO list + GMP (investorgain.com, via Playwright).
+  1. Scrape mainboard and SME IPO list + GMP (investorgain.com, via Playwright).
   2. Scrape ~10 financial/KPI metrics per company (chittorgarh.com).
   3. Render docs/index.html (static site, published via GitHub Pages).
   4. Email an alert for any IPO whose subscription opens or closes today.
@@ -26,13 +26,12 @@ SITE_URL = os.environ.get("SITE_URL", "https://tushar-mishra999.github.io/ipo-bo
 
 def build_records():
     gmp_rows = scrape_gmp_list()
-    mainboard = [r for r in gmp_rows if r["is_mainboard"]]
-    print(f"Found {len(mainboard)} mainboard IPOs (of {len(gmp_rows)} total).")
+    print(f"Found {len(gmp_rows)} IPOs, including {sum(not r['is_mainboard'] for r in gmp_rows)} SME IPOs.")
 
     chittorgarh_map = scrape_chittorgarh_links()
 
     records = []
-    for row in mainboard:
+    for row in gmp_rows:
         url = match_chittorgarh_url(row["name"], chittorgarh_map)
         metrics = []
         if url:
