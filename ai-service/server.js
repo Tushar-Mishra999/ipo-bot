@@ -92,7 +92,7 @@ http.createServer((request, response) => {
     }).then(async result => {
       if (!result.ok) {
         lastRefresh = 0;
-        return send(response, 502, {error: 'Could not start the refresh workflow.'});
+        return send(response, 502, {error: `GitHub rejected the refresh request (HTTP ${result.status}).`});
       }
       send(response, 200, {started: new Date(lastRefresh).toISOString()});
     }).catch(() => { lastRefresh = 0; send(response, 502, {error: 'Could not contact GitHub.'}); });
