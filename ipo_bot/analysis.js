@@ -177,10 +177,8 @@ function scoreColor(points) {
 }
 const AI_API = window.IPO_AI_ENDPOINT || '';
 async function loadExplanation(company, result, scores) {
-  const target = $('ai-explanation');
   if (!AI_API) {
-    target.textContent = 'AI explanation is awaiting server setup.';
-    return;
+    return 'AI explanation is awaiting server setup.';
   }
   try {
     const response = await fetch(`${AI_API}/explain`, {
@@ -192,24 +190,23 @@ async function loadExplanation(company, result, scores) {
     });
     if (!response.ok) throw new Error('AI analysis is temporarily unavailable.');
     const body = await response.json();
-    target.textContent = body.explanation;
+    return body.explanation;
   } catch (error) {
-    target.textContent = error.message;
+    return error.message;
   }
 }
-function render(parsed, result, scores, company) {
+function render(parsed, result, scores, company, explanation) {
   const {pillars, composite, verdict, coverage} = scores;
   const bars = pillars.map(p => `<div class="pillar"><div><strong>${escapeHtml(p.name)}</strong><small>Coverage ${p.coverage}%</small></div><div class="track"><span style="width:${p.score ?? 0}%"></span></div><b>${p.score == null ? '—' : Math.round(p.score)}</b></div>`).join('');
   const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(item.metric)}</td><td>${item.value == null ? '—' : Number(item.value.toFixed(3))}</td><td class="${scoreColor(item.points)}">${item.points == null ? 'Skipped' : Math.round(item.points)+'/100'}</td></tr>`)).join('');
   const sales = parsed.data.sales, pat = parsed.data.pat;
   const trends = trendChart(parsed.years, sales, pat);
   $('analysis').innerHTML = `<div class="analysis-head"><h2>${escapeHtml(company)} — IPO Analysis</h2><span>${escapeHtml(parsed.years[0])}–${escapeHtml(parsed.years.at(-1))} · ${parsed.years.length} years</span></div>
-    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score</small><small>${coverage}% data coverage</small></div></div><section class="ai-card"><h3>AI Analysis</h3><p id="ai-explanation" role="status">Generating explanation…</p></section></div><div class="pillars pillar-grid">${bars}</div>
+    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score</small><small>${coverage}% data coverage</small></div></div><section class="ai-card"><h3>AI Analysis</h3><p id="ai-explanation">${escapeHtml(explanation)}</p></section></div><div class="pillars pillar-grid">${bars}</div>
     <div class="detail-grid"><section><h3>Key Financial Trends</h3>${trends}</section>
     <section><h3>Forensic & Quality Checks</h3><table><thead><tr><th>Metric</th><th>Value</th><th>Score</th></tr></thead><tbody>${checks}</tbody></table>${result.lossMaking ? '<p class="warning">Loss making year found. CFO / PAT excludes years with zero or negative PAT.</p>' : ''}</section></div>`;
   $('analysis').hidden = false;
   $('analysis').scrollIntoView({behavior:'smooth', block:'start'});
-  loadExplanation(company, result, scores);
 }
 
 const configPromise = fetch('analyzer_config.json').then(response => {
@@ -222,7 +219,7 @@ $('upload').addEventListener('change', async event => {
   const loading = document.createElement('div');
   loading.className = 'analysis-loading';
   loading.setAttribute('role', 'status');
-  loading.innerHTML = '<span class="spinner" aria-hidden="true"></span> Reading financials and calculating scores…';
+  loading.innerHTML = '<span class="spinner" aria-hidden="true"></span> Preparing the full analysis and AI explanation…';
   $('analysis').hidden = false;
   $('analysis').replaceChildren(loading);
   $('upload-status').textContent = `Analyzing ${file.name}…`;
@@ -233,7 +230,9 @@ $('upload').addEventListener('change', async event => {
     const parsed = parseWorkbook(workbook);
     const result = calculate(parsed);
     const scores = score(result, await configPromise);
-    render(parsed, result, scores, $('company').value || file.name.replace(/\.xlsx?$/i,''));
+    const company = $('company').value || file.name.replace(/\.xlsx?$/i,'');
+    const explanation = await loadExplanation(company, result, scores);
+    render(parsed, result, scores, company, explanation);
     $('upload-status').textContent = `${file.name} analyzed in this browser.`;
   } catch (error) {
     $('upload-status').textContent = error.message;

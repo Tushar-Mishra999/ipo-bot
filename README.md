@@ -16,15 +16,19 @@ no server needed.
 2. It builds a static website (`docs/index.html`) and publishes it to **GitHub Pages**.
 3. For any IPO whose subscription opens or closes *today*, it emails a summary (GMP + financials) to the configured recipients.
 
-The dashboard includes a **Refresh data** control. On first use, it asks for a GitHub
-fine-grained token with Actions read/write access to this repository. The token is kept
-in browser session storage, and the dashboard starts and monitors the workflow without
-leaving the page. The daily schedule continues to run at 03:00 UTC.
+The dashboard includes a **Refresh data** control. The Render service starts the
+GitHub workflow and the browser monitors its progress. Visitors do not need a GitHub
+token. Set `GITHUB_REFRESH_TOKEN` once in the Render service environment to a
+fine-grained GitHub token limited to this repository with Actions read/write access.
+Keep it out of the browser and repository. Manual refreshes are limited to one start
+every ten minutes and do not send duplicate IPO alert emails. The daily schedule
+continues to run at 03:00 UTC.
 
 For an open IPO, choose **Analyze** and upload its Screener.in Excel export. The browser
 reads the `Data Sheet` tab and calculates five pillar scores, data coverage, a composite
 score, and a verdict. Missing metrics are skipped. The uploaded workbook is processed
-locally in the browser. Scoring thresholds and weights are in
+locally in the browser. The complete analysis appears after the AI explanation returns.
+Scoring thresholds and weights are in
 `ipo_bot/analyzer_config.json`.
 
 The optional AI explanation service lives in `ai-service/`. It uses the same

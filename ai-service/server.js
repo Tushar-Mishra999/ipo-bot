@@ -15,6 +15,8 @@ const origin = process.env.IPO_DASHBOARD_ORIGIN || 'https://tushar-mishra999.git
 const project = process.env.GOOGLE_CLOUD_PROJECT;
 const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
 const ai = new GoogleGenAI({vertexai: true, project, location});
+const githubRepo = 'Tushar-Mishra999/ipo-bot';
+let lastRefresh = 0;
 
 const factorMeaning = {
   'Earnings Quality': 'Shows whether reported profit is backed by cash from operations. A weak score can mean profits are slow to turn into cash.',
@@ -79,6 +81,23 @@ async function explain(payload) {
 http.createServer((request, response) => {
   if (request.method === 'OPTIONS') return send(response, 204, {});
   if (request.method === 'GET' && request.url === '/health') return send(response, 200, {ok: true});
+  if (request.method === 'POST' && request.url === '/refresh' && request.headers.origin === origin) {
+    if (!process.env.GITHUB_REFRESH_TOKEN) return send(response, 503, {error: 'Manual refresh is not configured on the server.'});
+    if (Date.now() - lastRefresh < 10 * 60 * 1000) return send(response, 429, {error: 'A refresh was started recently. Check again shortly.'});
+    lastRefresh = Date.now();
+    fetch(`https://api.github.com/repos/${githubRepo}/actions/workflows/ipo-bot.yml/dispatches`, {
+      method: 'POST',
+      headers: {Authorization: `Bearer ${process.env.GITHUB_REFRESH_TOKEN}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'User-Agent': 'ipo-dashboard-refresh'},
+      body: JSON.stringify({ref: 'master', inputs: {manual_refresh: 'true'}})
+    }).then(async result => {
+      if (!result.ok) {
+        lastRefresh = 0;
+        return send(response, 502, {error: 'Could not start the refresh workflow.'});
+      }
+      send(response, 200, {started: new Date(lastRefresh).toISOString()});
+    }).catch(() => { lastRefresh = 0; send(response, 502, {error: 'Could not contact GitHub.'}); });
+    return;
+  }
   if (request.method !== 'POST' || request.url !== '/explain' || request.headers.origin !== origin) {
     return send(response, 403, {error: 'Forbidden'});
   }

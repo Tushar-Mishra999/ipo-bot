@@ -5,7 +5,12 @@ on:
     branches: [master]
   schedule:
     - cron: "0 3 * * *"  # 03:00 UTC = 08:30 AM IST, daily
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      manual_refresh:
+        description: Refresh dashboard without sending duplicate alert emails
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,6 +43,7 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           SITE_URL: ${{ vars.SITE_URL }}
           ANALYSIS_API_URL: https://ipo-bot-memn.onrender.com
+          SKIP_ALERT_EMAIL: ${{ inputs.manual_refresh || 'false' }}
         run: python main.py
 
       - name: Upload Pages artifact

@@ -80,7 +80,8 @@ def main():
         shutil.copyfile(os.path.join("ipo_bot", asset), os.path.join("docs", asset))
     print("Wrote docs/index.html")
 
-    send_trigger_emails(records, date.today())
+    if os.environ.get("SKIP_ALERT_EMAIL", "false").lower() != "true":
+        send_trigger_emails(records, date.today())
 
 
 if __name__ == "__main__":
