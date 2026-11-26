@@ -42,7 +42,8 @@ def _parse_money(text):
     m = re.search(r"₹([\d,.\-]+|--)\s*\(([\-\d.]+)%\)", text)
     if not m:
         return None, None
-    raw_val, pct = m.group(1), float(m.group(2))
+    raw_val = m.group(1)
+    pct = None if m.group(2) == "-" else float(m.group(2))
     if raw_val == "--":
         return None, pct
     return float(raw_val.replace(",", "")), pct
@@ -75,7 +76,7 @@ def scrape_gmp_list(today=None):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(user_agent=HEADERS["User-Agent"])
-        page.goto(GMP_URL, wait_until="networkidle", timeout=60000)
+        page.goto(GMP_URL, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_selector("table tbody tr", timeout=30000)
         rows = page.query_selector_all("table tbody tr")
         raw_rows = []
