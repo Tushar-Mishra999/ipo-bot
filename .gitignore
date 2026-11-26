@@ -1,3 +1,4 @@
 __pycache__/
 *.pyc
 docs/
+ai-service/node_modules/

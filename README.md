@@ -27,6 +27,13 @@ score, and a verdict. Missing metrics are skipped. The uploaded workbook is proc
 locally in the browser. Scoring thresholds and weights are in
 `ipo_bot/analyzer_config.json`.
 
+The optional AI explanation service lives in `ai-service/`. It uses the same
+`@google/genai` Vertex AI pattern as `project-s` and needs
+`GOOGLE_CLOUD_PROJECT` plus Cloud Run's attached service account. For local
+development, it can use `GOOGLE_APPLICATION_CREDENTIALS_JSON`. Set the
+dashboard workflow variable `ANALYSIS_API_URL` to its deployed HTTPS URL.
+The service-account key must stay out of the repository and browser code.
+
 ## Setup (one-time)
 
 ### 1. Repository secrets

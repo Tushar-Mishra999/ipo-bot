@@ -142,33 +142,60 @@ function score(result, config) {
 
 const escapeHtml = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function trendChart(years, sales, profit) {
-  const width = 620, height = 285, left = 55, right = 20, top = 25, bottom = 45;
+  const width = 620, height = 285, left = 58, right = 58, top = 30, bottom = 45;
   const plotWidth = width-left-right, plotHeight = height-top-bottom;
-  const values = [...sales, ...profit].filter(v => v != null);
-  if (!values.length) return '<p>No sales or profit data available.</p>';
-  const max = Math.max(1, ...values) * 1.12;
-  const min = Math.min(0, ...values);
-  const range = max - min;
-  const y = value => top + (max-value)/range*plotHeight;
+  const salesValues = sales.filter(v => v != null), profitValues = profit.filter(v => v != null);
+  if (!salesValues.length && !profitValues.length) return '<p>No sales or profit data available.</p>';
+  const salesMax = Math.max(1, ...salesValues) * 1.12;
+  const profitMax = Math.max(1, ...profitValues) * 1.12;
+  const profitMin = Math.min(0, ...profitValues);
+  const salesY = value => top + (salesMax-value)/salesMax*plotHeight;
+  const profitY = value => top + (profitMax-value)/(profitMax-profitMin)*plotHeight;
   const x = i => left + (i+0.5)*plotWidth/years.length;
-  const baseline = y(0);
-  const ticks = Array.from({length: 5}, (_,i) => min+(max-min)*i/4).map(value =>
-    `<line x1="${left}" x2="${width-right}" y1="${y(value)}" y2="${y(value)}" stroke="#364064" stroke-dasharray="4 5"/><text x="${left-8}" y="${y(value)+4}" text-anchor="end" fill="#aeb6d6" font-size="11">${Math.round(value).toLocaleString()}</text>`).join('');
+  const baseline = salesY(0);
+  const ticks = Array.from({length: 5}, (_,i) => i/4).map(fraction => {
+    const y = top + (1-fraction)*plotHeight;
+    const salesTick = salesMax*fraction;
+    const profitTick = profitMin+(profitMax-profitMin)*fraction;
+    return `<line x1="${left}" x2="${width-right}" y1="${y}" y2="${y}" stroke="#364064" stroke-dasharray="4 5"/><text x="${left-8}" y="${y+4}" text-anchor="end" fill="#ba96ff" font-size="11">${Math.round(salesTick).toLocaleString()}</text><text x="${width-right+8}" y="${y+4}" fill="#72f6a1" font-size="11">${Math.round(profitTick).toLocaleString()}</text>`;
+  }).join('');
   const bars = sales.map((value,i) => value == null ? '' :
-    `<rect x="${x(i)-Math.min(25,plotWidth/years.length*0.34)}" y="${Math.min(y(value),baseline)}" width="${Math.min(50,plotWidth/years.length*0.68)}" height="${Math.max(1,Math.abs(baseline-y(value)))}" rx="5" fill="url(#salesGradient)"><title>${escapeHtml(years[i])} sales: ${value.toLocaleString()}</title></rect>`).join('');
+    `<rect x="${x(i)-Math.min(25,plotWidth/years.length*0.34)}" y="${Math.min(salesY(value),baseline)}" width="${Math.min(50,plotWidth/years.length*0.68)}" height="${Math.max(1,Math.abs(baseline-salesY(value)))}" rx="5" fill="url(#salesGradient)"><title>${escapeHtml(years[i])} sales: ${value.toLocaleString()}</title></rect>`).join('');
   const segments = [];
   for (let i=1;i<profit.length;i++) if (profit[i-1] != null && profit[i] != null)
-    segments.push(`<line x1="${x(i-1)}" y1="${y(profit[i-1])}" x2="${x(i)}" y2="${y(profit[i])}" stroke="#72f6a1" stroke-width="3"/>`);
+    segments.push(`<line x1="${x(i-1)}" y1="${profitY(profit[i-1])}" x2="${x(i)}" y2="${profitY(profit[i])}" stroke="#72f6a1" stroke-width="3"/>`);
   const points = profit.map((value,i) => value == null ? '' :
-    `<circle cx="${x(i)}" cy="${y(value)}" r="5" fill="#72f6a1" stroke="#17213d" stroke-width="2"><title>${escapeHtml(years[i])} profit: ${value.toLocaleString()}</title></circle>`).join('');
+    `<circle cx="${x(i)}" cy="${profitY(value)}" r="5" fill="#72f6a1" stroke="#17213d" stroke-width="2"><title>${escapeHtml(years[i])} profit: ${value.toLocaleString()}</title></circle>`).join('');
   const labels = years.map((year,i) => `<text x="${x(i)}" y="${height-12}" text-anchor="middle" fill="#c6c9e1" font-size="11">${escapeHtml(year)}</text>`).join('');
-  return `<div class="chart-legend"><span class="sales-dot"></span>Sales <span class="profit-dot"></span>Net profit</div><svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Sales bars and net profit line by year"><defs><linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#aa71ff"/><stop offset="1" stop-color="#6d48d3"/></linearGradient></defs>${ticks}${bars}${segments.join('')}${points}${labels}</svg>`;
+  return `<div class="chart-legend"><span class="sales-dot"></span>Sales · left axis <span class="profit-dot"></span>Net profit · right axis</div><svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Sales bars on the left axis and net profit line on the right axis by year"><defs><linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#aa71ff"/><stop offset="1" stop-color="#6d48d3"/></linearGradient></defs>${ticks}${bars}${segments.join('')}${points}${labels}</svg>`;
 }
 function scoreColor(points) {
   if (points == null) return 'muted';
   if (points >= 75) return 'good';
   if (points >= 40) return 'caution';
   return 'bad';
+}
+const AI_API = window.IPO_AI_ENDPOINT || '';
+async function loadExplanation(company, result, scores) {
+  const target = $('ai-explanation');
+  if (!AI_API) {
+    target.textContent = 'AI explanation is awaiting server setup.';
+    return;
+  }
+  try {
+    const response = await fetch(`${AI_API}/explain`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({company, verdict:scores.verdict, composite:scores.composite,
+        coverage:scores.coverage, caps:scores.caps,
+        pillars:scores.pillars.map(({name,score,coverage}) => ({name,score,coverage})),
+        metrics:result.metrics})
+    });
+    if (!response.ok) throw new Error('AI analysis is temporarily unavailable.');
+    const body = await response.json();
+    target.textContent = body.explanation;
+  } catch (error) {
+    target.textContent = error.message;
+  }
 }
 function render(parsed, result, scores, company) {
   const {pillars, composite, verdict, coverage} = scores;
@@ -177,11 +204,12 @@ function render(parsed, result, scores, company) {
   const sales = parsed.data.sales, pat = parsed.data.pat;
   const trends = trendChart(parsed.years, sales, pat);
   $('analysis').innerHTML = `<div class="analysis-head"><h2>${escapeHtml(company)} — IPO Analysis</h2><span>${escapeHtml(parsed.years[0])}–${escapeHtml(parsed.years.at(-1))} · ${parsed.years.length} years</span></div>
-    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score</small><small>${coverage}% data coverage</small></div></div><div class="pillars">${bars}</div></div>
+    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score</small><small>${coverage}% data coverage</small></div></div><section class="ai-card"><h3>AI Analysis</h3><p id="ai-explanation" role="status">Generating explanation…</p></section></div><div class="pillars pillar-grid">${bars}</div>
     <div class="detail-grid"><section><h3>Key Financial Trends</h3>${trends}</section>
     <section><h3>Forensic & Quality Checks</h3><table><thead><tr><th>Metric</th><th>Value</th><th>Score</th></tr></thead><tbody>${checks}</tbody></table>${result.lossMaking ? '<p class="warning">Loss making year found. CFO / PAT excludes years with zero or negative PAT.</p>' : ''}</section></div>`;
   $('analysis').hidden = false;
   $('analysis').scrollIntoView({behavior:'smooth', block:'start'});
+  loadExplanation(company, result, scores);
 }
 
 const configPromise = fetch('analyzer_config.json').then(response => {
@@ -191,8 +219,15 @@ const configPromise = fetch('analyzer_config.json').then(response => {
 $('upload').addEventListener('change', async event => {
   const file = event.target.files[0];
   if (!file) return;
+  const loading = document.createElement('div');
+  loading.className = 'analysis-loading';
+  loading.setAttribute('role', 'status');
+  loading.innerHTML = '<span class="spinner" aria-hidden="true"></span> Reading financials and calculating scores…';
+  $('analysis').hidden = false;
+  $('analysis').replaceChildren(loading);
   $('upload-status').textContent = `Analyzing ${file.name}…`;
   try {
+    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
     if (typeof XLSX === 'undefined') throw new Error('Excel reader could not load. Check your connection and try again.');
     const workbook = XLSX.read(await file.arrayBuffer(), {type:'array', cellDates:true});
     const parsed = parseWorkbook(workbook);
@@ -202,6 +237,7 @@ $('upload').addEventListener('change', async event => {
     $('upload-status').textContent = `${file.name} analyzed in this browser.`;
   } catch (error) {
     $('upload-status').textContent = error.message;
+    $('analysis').hidden = true;
   }
   event.target.value = '';
 });

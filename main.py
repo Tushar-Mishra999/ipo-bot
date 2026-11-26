@@ -73,7 +73,7 @@ def main():
     records = build_records()
 
     os.makedirs("docs", exist_ok=True)
-    html_out = render_site(records)
+    html_out = render_site(records, os.environ.get("ANALYSIS_API_URL", ""))
     with open("docs/index.html", "w", encoding="utf-8") as f:
         f.write(html_out)
     for asset in ("analysis.js", "refresh.js", "analyzer_config.json"):
