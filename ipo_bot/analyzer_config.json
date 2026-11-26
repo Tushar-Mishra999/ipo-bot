@@ -7,5 +7,14 @@
     "Cash and Capital Allocation": {"weight": 0.15, "metrics": {"FCF / PAT": [0, 0.8], "Dividend payout vs cash": [1, 0], "Cash / Borrowings": [0.1, 1]}}
   },
   "verdict": {"invest": 75, "watchlist": 55},
-  "caps": {"Beneish M-Score": -1.78, "Altman Z''": 1.1, "CFO / PAT": 0.5}
+  "caps": {"Beneish M-Score": -1.78, "Altman Z''": 1.1, "CFO / PAT": 0.5},
+  "preferences": {
+    "min": 0, "max": 10, "step": 1, "default": 5, "weight_floor": 5,
+    "holding": {"label": "Holding horizon", "info": "How long you expect to hold the shares.", "low": "Sell soon after listing", "high": "Hold for 5+ years", "adjustments": {"Profitability and Growth": 15}},
+    "safety": {"label": "Safety priority", "info": "How much you value balance-sheet strength and accounting caution.", "low": "Comfortable with high risk", "high": "Capital safety first", "adjustments": {"Financial Strength": 10, "Forensic Risk": 10}},
+    "income": {"label": "Income need", "info": "How important dividend income is to you.", "low": "Don't need dividends", "high": "Regular income matters", "adjustments": {"Cash and Capital Allocation": 10, "Earnings Quality": 5}},
+    "safety_cap": {"min_slider": 7, "debt_equity_above": 1.0, "interest_cover_below": 2},
+    "short_term": {"max_slider": 2, "notice": "Short-term outcomes depend heavily on market sentiment. This score measures financial quality and risk only"},
+    "education_note": "For education only, not personalised financial advice."
+  }
 }

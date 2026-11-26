@@ -112,7 +112,19 @@ function calculate(parsed) {
   return {metrics, extra: {receivableDays: daysNow, EBITDA: margin(n-1), capex, fcf}, lossMaking: data.pat.some(v => v != null && v <= 0)};
 }
 
-function score(result, config) {
+function preferenceWeights(config, preferences) {
+  const settings = config.preferences;
+  const raw = Object.fromEntries(Object.entries(config.pillars).map(([name, pillar]) => [name, pillar.weight * 100]));
+  for (const key of ['holding', 'safety', 'income']) {
+    const delta = (preferences[key] - settings.default) / settings.default;
+    for (const [name, amount] of Object.entries(settings[key].adjustments)) raw[name] += amount * delta;
+  }
+  for (const name of Object.keys(raw)) raw[name] = Math.max(settings.weight_floor, raw[name]);
+  const total = Object.values(raw).reduce((sum, value) => sum + value, 0);
+  return Object.fromEntries(Object.entries(raw).map(([name, value]) => [name, value / total]));
+}
+function score(result, config, preferences = Object.fromEntries(['holding', 'safety', 'income'].map(key => [key, config.preferences.default]))) {
+  const weights = preferenceWeights(config, preferences);
   const pillars = [];
   for (const [name, definition] of Object.entries(config.pillars)) {
     const items = Object.entries(definition.metrics).map(([metric, [bad, good]]) => {
@@ -121,7 +133,7 @@ function score(result, config) {
       return {metric, value, points};
     });
     const available = items.filter(item => item.points != null);
-    pillars.push({name, weight: definition.weight, items,
+    pillars.push({name, weight: weights[name], items,
       coverage: Math.round(100*available.length/items.length),
       score: available.length ? available.reduce((s, item) => s+item.points, 0)/available.length : null});
   }
@@ -130,14 +142,21 @@ function score(result, config) {
   const composite = weight ? used.reduce((s,p) => s+p.score*p.weight,0)/weight : null;
   let verdict = composite == null ? 'Insufficient data' : composite >= config.verdict.invest ? 'Invest' :
     composite >= config.verdict.watchlist ? 'Watchlist' : 'Avoid';
-  const caps = [result.metrics['Beneish M-Score'] != null && result.metrics['Beneish M-Score'] > config.caps['Beneish M-Score'],
-    result.metrics["Altman Z''"] != null && result.metrics["Altman Z''"] < config.caps["Altman Z''"],
-    result.metrics['CFO / PAT'] != null && result.metrics['CFO / PAT'] < config.caps['CFO / PAT']].filter(Boolean).length;
-  if (caps >= 2) verdict = 'Avoid';
-  else if (caps && verdict === 'Invest') verdict = 'Watchlist';
+  const baseCaps = [
+    result.metrics['Beneish M-Score'] != null && result.metrics['Beneish M-Score'] > config.caps['Beneish M-Score'] ? 'Beneish M-Score warning' : null,
+    result.metrics["Altman Z''"] != null && result.metrics["Altman Z''"] < config.caps["Altman Z''"] ? 'Altman Z distress warning' : null,
+    result.metrics['CFO / PAT'] != null && result.metrics['CFO / PAT'] < config.caps['CFO / PAT'] ? 'Weak profit-to-cash conversion' : null
+  ].filter(Boolean);
+  const safetyRule = config.preferences.safety_cap;
+  const safetyCaps = preferences.safety >= safetyRule.min_slider ? [
+    result.metrics['Debt / Equity'] != null && result.metrics['Debt / Equity'] > safetyRule.debt_equity_above ? 'Debt/Equity exceeds safety limit' : null,
+    result.metrics['Interest cover'] != null && result.metrics['Interest cover'] < safetyRule.interest_cover_below ? 'Interest cover is below safety limit' : null
+  ].filter(Boolean) : [];
+  if (baseCaps.length >= 2) verdict = 'Avoid';
+  else if ((baseCaps.length || safetyCaps.length) && verdict === 'Invest') verdict = 'Watchlist';
   const coverage = Math.round(100 * pillars.reduce((sum, pillar) =>
     sum + pillar.weight * pillar.coverage / 100, 0));
-  return {pillars, composite, verdict, caps, coverage};
+  return {pillars, composite, verdict, caps: baseCaps.length, capReasons: [...baseCaps, ...safetyCaps], coverage, weights};
 }
 
 const escapeHtml = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -197,7 +216,7 @@ function scoreColor(points) {
   return 'bad';
 }
 const AI_API = window.IPO_AI_ENDPOINT || '';
-async function loadExplanation(company, result, scores) {
+async function loadExplanation(company, result, scores, preferences) {
   if (!AI_API) {
     return 'AI explanation is awaiting server setup.';
   }
@@ -205,7 +224,7 @@ async function loadExplanation(company, result, scores) {
     const response = await fetch(`${AI_API}/explain`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({company, verdict:scores.verdict, composite:scores.composite,
-        coverage:scores.coverage, caps:scores.caps,
+        coverage:scores.coverage, caps:scores.caps, capReasons:scores.capReasons, preferences,
         pillars:scores.pillars.map(({name,score,coverage}) => ({name,score,coverage})),
         metrics:result.metrics})
     });
@@ -216,20 +235,51 @@ async function loadExplanation(company, result, scores) {
     return error.message;
   }
 }
-function render(parsed, result, scores, company, explanation, config, info) {
+const preferences = {};
+let currentAnalysis = null;
+let explanationVersion = 0;
+let explanationTimer = null;
+const preferenceSummary = () => [
+  preferences.holding <= 2 ? 'short holding horizon' : preferences.holding >= 8 ? 'long holding horizon' : 'medium holding horizon',
+  preferences.safety >= 7 ? 'safety first' : preferences.safety <= 3 ? 'comfortable with risk' : 'balanced safety',
+  preferences.income >= 7 ? 'income important' : preferences.income <= 3 ? 'little income need' : 'moderate income need'
+].join(' · ');
+function ipoContext(company) {
+  const clean = value => value.toLowerCase().replace(/[^a-z0-9]/g, '').replace(/(?:industries|limited|ltd)$/,'');
+  const name = clean(company);
+  const match = (window.IPO_CONTEXT || []).find(item => {
+    const candidate = clean(item.name);
+    return name.length > 5 && (candidate === name || candidate.includes(name) || name.includes(candidate));
+  });
+  if (!match) return '<p>GMP and subscription status are unavailable for this uploaded file.</p>';
+  const today = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Kolkata', year:'numeric', month:'2-digit', day:'2-digit'}).format(new Date());
+  const status = match.open_date && today < match.open_date ? 'Upcoming' : match.close_date && today > match.close_date ? 'Closed' : 'Open';
+  const gmp = match.gmp_pct == null ? 'Unavailable' : `${match.gmp_pct >= 0 ? '+' : ''}${Number(match.gmp_pct).toFixed(2)}%`;
+  return `<p>GMP: <strong>${gmp}</strong> · Subscription window: <strong>${status}</strong></p><p>GMP is an unofficial market indicator, shown as context only and never part of the score. Subscription multiples are unavailable.</p>`;
+}
+function signalPanels(scores) {
+  const items = scores.pillars.flatMap(p => p.items.filter(item => item.points != null).map(item => ({...item, priority: p.weight})));
+  const list = (entries, fallback) => entries.slice(0, 3).map(item => `<li>${escapeHtml(item.metric)} (${Math.round(item.points)}/100)</li>`).join('') || `<li>${fallback}</li>`;
+  const flags = items.filter(item => item.points < 50).sort((a,b) => b.priority*(100-b.points)-a.priority*(100-a.points));
+  const strengths = items.filter(item => item.points >= 70).sort((a,b) => b.priority*b.points-a.priority*a.points);
+  return `<div class="strengths-flags"><section><h3>Top red flags for your goals</h3><ul>${list(flags, 'No strong red flags in the measured metrics')}</ul></section><section><h3>Top strengths for your goals</h3><ul>${list(strengths, 'No strong factors in the measured metrics')}</ul></section></div>`;
+}
+function render(parsed, result, scores, company, explanation, config, info, scroll = true) {
   const {pillars, composite, verdict} = scores;
   const bars = pillars.map(p => `<div class="pillar"><div><strong>${escapeHtml(p.name)}</strong>${infoIcon(p.name, [info.pillars[p.name]?.description, `High score: ${info.pillars[p.name]?.high}`, `Low score: ${info.pillars[p.name]?.low}`])}</div><div class="track"><span style="width:${p.score ?? 0}%"></span></div><b>${p.score == null ? '—' : Math.round(p.score)}</b></div>`).join('');
   const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(item.metric)} ${metricTip(item.metric, info, config)}</td><td>${formatMetric(item.value, info.metrics[item.metric]?.format)}</td><td class="${scoreColor(item.points)}">${item.points == null ? 'Skipped' : Math.round(item.points)+'/100'}</td></tr>`)).join('');
-  const weights = Object.values(config.pillars).map(p => `${Math.round(p.weight*100)}%`).join('/');
+  const weights = pillars.map(p => `${(p.weight*100).toFixed(1)}%`).join('/');
   const compositeTip = infoIcon('Composite Score', [info.composite.description.replace('{weights}', weights), `Good: ${info.composite.good.replace('{value}', config.verdict.invest)}`, `Watch: ${info.composite.watch.replace('{value}', config.verdict.watchlist)}`]);
+  const weightsUsed = pillars.map(p => `<span>${escapeHtml(p.name)} ${(p.weight*100).toFixed(1)}%</span>`).join('');
+  const shortContext = preferences.holding <= config.preferences.short_term.max_slider ? `<div class="short-context"><p class="short-notice">${escapeHtml(config.preferences.short_term.notice)}</p>${ipoContext(company)}</div>` : '';
   const sales = parsed.data.sales, pat = parsed.data.pat;
   const trends = trendChart(parsed.years, sales, pat);
   $('analysis').innerHTML = `<div class="analysis-head"><h2>${escapeHtml(company)} — IPO Analysis</h2><span>${escapeHtml(parsed.years[0])}–${escapeHtml(parsed.years.at(-1))} · ${parsed.years.length} years</span></div>
-    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score ${compositeTip}</small></div></div><section class="ai-card"><h3>AI Analysis</h3><p id="ai-explanation">${escapeHtml(explanation)}</p></section></div><div class="pillars pillar-grid">${bars}</div>
+    <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong><div class="scored-for">Scored for: ${escapeHtml(preferenceSummary())}</div><div class="weight-list" aria-label="Weights used"><b>Weights used:</b>${weightsUsed}</div><div class="education-note">${escapeHtml(config.preferences.education_note)}</div></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score ${compositeTip}</small></div>${shortContext}</div><section class="ai-card"><h3>AI Analysis</h3><p id="ai-explanation">${escapeHtml(explanation)}</p></section></div>${signalPanels(scores)}<div class="pillars pillar-grid">${bars}</div>
     <div class="detail-grid"><section><h3>Key Financial Trends</h3>${trends}</section>
     <section><h3>Forensic & Quality Checks</h3><table><thead><tr><th>Metric</th><th>Value</th><th>Score</th></tr></thead><tbody>${checks}</tbody></table>${result.lossMaking ? '<p class="warning">Loss making year found. CFO / PAT excludes years with zero or negative PAT.</p>' : ''}</section></div>`;
   $('analysis').hidden = false;
-  $('analysis').scrollIntoView({behavior:'smooth', block:'start'});
+  if (scroll) $('analysis').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 const configPromise = fetch('analyzer_config.json').then(response => {
@@ -240,9 +290,46 @@ const infoPromise = fetch('metric_info.json').then(response => {
   if (!response.ok) throw new Error('Metric information could not be loaded.');
   return response.json();
 });
+function refreshForPreferences() {
+  const version = ++explanationVersion;
+  if (!currentAnalysis) return;
+  clearTimeout(explanationTimer);
+  const {parsed, result, company, config, info} = currentAnalysis;
+  const scores = score(result, config, preferences);
+  render(parsed, result, scores, company, 'Updating explanation…', config, info, false);
+  explanationTimer = setTimeout(async () => {
+    const explanation = await loadExplanation(company, result, scores, {...preferences});
+    if (version === explanationVersion) $('ai-explanation').textContent = explanation;
+  }, 400);
+}
+configPromise.then(config => {
+  const settings = config.preferences;
+  for (const key of ['holding', 'safety', 'income']) preferences[key] = settings.default;
+  const controls = ['holding', 'safety', 'income'].map(key => {
+    const item = settings[key];
+    return `<div class="preference"><div class="preference-head"><label for="pref-${key}">${escapeHtml(item.label)}</label>${infoIcon(item.label, [item.info])}<output id="pref-${key}-value" for="pref-${key}">${settings.default}</output><button type="button" class="reset-preferences" data-reset="${key}">Reset</button></div><input id="pref-${key}" type="range" min="${settings.min}" max="${settings.max}" step="${settings.step}" value="${settings.default}"><div class="preference-ends"><span>${escapeHtml(item.low)}</span><span>${escapeHtml(item.high)}</span></div></div>`;
+  }).join('');
+  $('preferences').innerHTML = `<h3>Tell us what you are looking for</h3>${controls}`;
+  for (const key of ['holding', 'safety', 'income']) {
+    const slider = $(`pref-${key}`);
+    slider.addEventListener('input', () => {
+      preferences[key] = Number(slider.value);
+      $(`pref-${key}-value`).textContent = slider.value;
+      refreshForPreferences();
+    });
+  }
+  document.querySelectorAll('[data-reset]').forEach(button => button.addEventListener('click', () => {
+    const slider = $(`pref-${button.dataset.reset}`);
+    slider.value = settings.default;
+    slider.dispatchEvent(new Event('input', {bubbles:true}));
+  }));
+}).catch(error => { $('preferences').textContent = error.message; });
 $('upload').addEventListener('change', async event => {
   const file = event.target.files[0];
   if (!file) return;
+  currentAnalysis = null;
+  explanationVersion++;
+  clearTimeout(explanationTimer);
   const loading = document.createElement('div');
   loading.className = 'analysis-loading';
   loading.setAttribute('role', 'status');
@@ -256,10 +343,17 @@ $('upload').addEventListener('change', async event => {
     const workbook = XLSX.read(await file.arrayBuffer(), {type:'array', cellDates:true});
     const parsed = parseWorkbook(workbook);
     const result = calculate(parsed);
-    const scores = score(result, await configPromise);
+    const config = await configPromise;
+    const info = await infoPromise;
     const company = file.name.replace(/\.xlsx?$/i,'');
-    const explanation = await loadExplanation(company, result, scores);
-    render(parsed, result, scores, company, explanation, await configPromise, await infoPromise);
+    let version, scores, explanation;
+    do {
+      version = explanationVersion;
+      scores = score(result, config, preferences);
+      explanation = await loadExplanation(company, result, scores, {...preferences});
+    } while (version !== explanationVersion);
+    currentAnalysis = {parsed, result, company, config, info};
+    render(parsed, result, scores, company, explanation, config, info);
     $('upload-status').textContent = `${file.name} analyzed in this browser.`;
   } catch (error) {
     $('upload-status').textContent = error.message;

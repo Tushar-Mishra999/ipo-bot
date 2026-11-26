@@ -54,6 +54,8 @@ async function explain(payload) {
     composite: payload.composite,
     coverage: payload.coverage,
     caps: payload.caps,
+    capReasons: Array.isArray(payload.capReasons) ? payload.capReasons.slice(0, 5) : [],
+    preferences: payload.preferences || {},
     pillars: Array.isArray(payload.pillars) ? payload.pillars.slice(0, 5).map(pillar => ({
       name: pillar.name,
       score: pillar.score,
@@ -62,7 +64,7 @@ async function explain(payload) {
     })) : [],
     metrics: payload.metrics || {}
   };
-  const prompt = `Write 55 to 75 words explaining the reasons behind this fixed IPO verdict for a first-time investor. Explain what the strongest and weakest measured factors usually mean for a business, using the factor meanings supplied. Discuss any verdict caps and material data gaps. Focus on interpretation, not a list of scores; use at most one number. Do not state a verdict or tell the reader what to buy, sell, or subscribe to. Do not imply that a forensic warning proves wrongdoing. Use only the supplied facts.\n\n${JSON.stringify(facts)}`;
+  const prompt = `Write 55 to 75 words explaining the reasons behind this fixed IPO verdict for a first-time investor. The investor preferences change the pillar weights, not the underlying metrics. Explain what the strongest and weakest relevant measured factors usually mean, using the factor meanings supplied. Discuss any verdict cap reasons and material data gaps. Focus on interpretation, not a list of scores; use at most one number. Do not state a verdict or tell the reader what to buy, sell, or subscribe to. Do not imply that a forensic warning proves wrongdoing. Use only the supplied facts.\n\n${JSON.stringify(facts)}`;
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: prompt,

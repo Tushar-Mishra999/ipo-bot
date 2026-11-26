@@ -36,6 +36,10 @@ Scoring thresholds and weights are in
 `ipo_bot/analyzer_config.json`. The info tooltips are defined in
 `ipo_bot/metric_info.json`; their numeric Good and Watch levels are read from
 the scoring config at display time.
+Holding horizon, safety priority, and income need sliders adjust only the
+composite weights and the extra safety cap; pillar scores and metric values stay
+fixed. Short-horizon views show available GMP and the subscription window as
+context, outside the score. The IPO feed does not provide subscription multiples.
 
 The optional AI explanation service lives in `ai-service/`. It uses the same
 `@google/genai` Vertex AI pattern as `project-s` and needs
