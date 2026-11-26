@@ -218,7 +218,7 @@ async function loadExplanation(company, result, scores) {
 }
 function render(parsed, result, scores, company, explanation, config, info) {
   const {pillars, composite, verdict, coverage} = scores;
-  const bars = pillars.map(p => `<div class="pillar"><div><strong>${escapeHtml(p.name)}</strong>${infoIcon(p.name, [info.pillars[p.name]?.description, `High score: ${info.pillars[p.name]?.high}`, `Low score: ${info.pillars[p.name]?.low}`])}<small>Coverage ${p.coverage}% ${infoIcon('Coverage', [info.coverage.description, info.coverage.high, info.coverage.low])}</small></div><div class="track"><span style="width:${p.score ?? 0}%"></span></div><b>${p.score == null ? '—' : Math.round(p.score)}</b></div>`).join('');
+  const bars = pillars.map(p => `<div class="pillar"><div><strong>${escapeHtml(p.name)}</strong>${infoIcon(p.name, [info.pillars[p.name]?.description, `High score: ${info.pillars[p.name]?.high}`, `Low score: ${info.pillars[p.name]?.low}`])}</div><div class="track"><span style="width:${p.score ?? 0}%"></span></div><b>${p.score == null ? '—' : Math.round(p.score)}</b></div>`).join('');
   const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(item.metric)} ${metricTip(item.metric, info, config)}</td><td>${formatMetric(item.value, info.metrics[item.metric]?.format)}</td><td class="${scoreColor(item.points)}">${item.points == null ? 'Skipped' : Math.round(item.points)+'/100'}</td></tr>`)).join('');
   const weights = Object.values(config.pillars).map(p => `${Math.round(p.weight*100)}%`).join('/');
   const compositeTip = infoIcon('Composite Score', [info.composite.description.replace('{weights}', weights), `Good: ${info.composite.good.replace('{value}', config.verdict.invest)}`, `Watch: ${info.composite.watch.replace('{value}', config.verdict.watchlist)}`]);
@@ -257,7 +257,7 @@ $('upload').addEventListener('change', async event => {
     const parsed = parseWorkbook(workbook);
     const result = calculate(parsed);
     const scores = score(result, await configPromise);
-    const company = $('company').value || file.name.replace(/\.xlsx?$/i,'');
+    const company = file.name.replace(/\.xlsx?$/i,'');
     const explanation = await loadExplanation(company, result, scores);
     render(parsed, result, scores, company, explanation, await configPromise, await infoPromise);
     $('upload-status').textContent = `${file.name} analyzed in this browser.`;
