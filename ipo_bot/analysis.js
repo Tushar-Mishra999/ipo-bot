@@ -9,7 +9,7 @@ const number = value => {
 const divide = (a, b) => a == null || b == null || b === 0 ? null : a / b;
 const add = (...values) => values.every(v => v != null) ? values.reduce((a, b) => a + b, 0) : null;
 const difference = (a, b) => a == null || b == null ? null : a - b;
-const label = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const label = value => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/[^a-z0-9]/g, '');
 const rowNames = {
   sales: ['Sales', 'Revenue'], raw: ['Raw Material Cost'], inventoryChange: ['Change in Inventory'],
   power: ['Power and Fuel'], manufacturing: ['Other Mfr. Exp'], selling: ['Selling and admin'],
@@ -26,15 +26,10 @@ function parseWorkbook(workbook) {
   const sheet = workbook.Sheets['Data Sheet'];
   if (!sheet) throw new Error('This workbook needs a Data Sheet tab.');
   const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: null, raw: true});
-  const indexed = new Map();
-  for (const row of rows) {
-    const key = label(row[0]);
-    if (key && !indexed.has(key)) indexed.set(key, row);
-  }
-  const dateRows = rows.filter(row => /reportdate|yearended|yearending/i.test(label(row[0])));
-  const header = dateRows.find(row => row.slice(1).filter(v => v != null && v !== '').length >= 2) ||
-    rows.find(row => row.slice(1).filter(v => v instanceof Date || typeof v === 'number' && v > 30000 && v < 80000).length >= 2);
-  if (!header) throw new Error('Could not find the annual year columns in Data Sheet.');
+  const headers = rows.filter(row => label(row[0]) === 'reportdate');
+  const header = headers.reduce((best, row) => row.slice(1).filter(v => v != null && String(v).trim() && !/ttm|quarter/i.test(String(v))).length >
+    (best?.slice(1).filter(v => v != null && String(v).trim() && !/ttm|quarter/i.test(String(v))).length ?? 0) ? row : best, null);
+  if (!header) throw new Error('Report Date row missing from Data Sheet.');
   const columns = header.map((v, i) => i).filter(i => i > 0 && header[i] != null && header[i] !== '' &&
     !/ttm|quarter/i.test(String(header[i])));
   if (!columns.length) throw new Error('No annual data columns were found.');
@@ -45,17 +40,27 @@ function parseWorkbook(workbook) {
     const match = String(value).match(/20\d{2}|\d{2}$/);
     return match ? String(match[0]).replace(/^([0-9]{2})$/, '20$1') : String(value);
   });
-  const data = {};
+  const indexed = new Map();
+  for (const row of rows) {
+    const key = label(row[0]);
+    if (key && !indexed.has(key)) indexed.set(key, row);
+    else if (key && indexed.get(key) && row.slice(1).some(v => number(v) != null) &&
+      !indexed.get(key).slice(1).some(v => number(v) != null)) indexed.set(key, row);
+  }
+  const data = {}, missingLabels = [], blankCells = {};
   for (const [key, aliases] of Object.entries(rowNames)) {
     const row = aliases.map(name => indexed.get(label(name))).find(Boolean);
-    data[key] = columns.map(i => row ? number(row[i]) : null);
+    if (!row) missingLabels.push(aliases[0]);
+    blankCells[key] = columns.map(i => !!row && number(row[i]) == null);
+    data[key] = columns.map(i => row ? (number(row[i]) ?? 0) : null);
   }
-  return {years, data};
+  return {years, data, missingLabels, blankCells};
 }
 
 function calculate(parsed) {
   const {years, data} = parsed;
   const n = years.length;
+  const diagnostics = {};
   const at = (key, i = n - 1) => data[key][i];
   const previous = key => at(key, n - 2);
   const latest = key => at(key);
@@ -86,6 +91,11 @@ function calculate(parsed) {
   const cagr = key => n > 1 && at(key, 0) > 0 && latest(key) > 0 ? Math.pow(latest(key)/at(key, 0), 1/(n-1))-1 : null;
   metrics['Sales CAGR'] = cagr('sales');
   metrics['PAT CAGR'] = cagr('pat');
+  for (const [name, key] of [['Sales CAGR','sales'], ['PAT CAGR','pat']]) {
+    if (n === 2) diagnostics[name] = {notes: ['1-year growth: this trend rests on only two data points.']};
+    if (n < 2) diagnostics[name] = {skipReason: `Needs at least 2 years (found ${n})`};
+    else if (metrics[name] == null) diagnostics[name] = {skipReason: `${rowNames[key][0]} must be positive in the first and last years`};
+  }
   metrics['ROE'] = divide(latest('pat'), equity(n - 1));
   metrics['EBITDA margin trend'] = n > 1 ? difference(margin(n - 1), margin(0)) : null;
   const capex = n > 1 ? add(difference(latest('netBlock'), previous('netBlock')),
@@ -95,21 +105,79 @@ function calculate(parsed) {
   metrics['Dividend payout vs cash'] = latest('cfo') > 0 && latest('dividend') != null ?
     divide(latest('dividend'), latest('cfo')) : null;
   metrics['Cash / Borrowings'] = divide(latest('cash'), latest('borrowings'));
-  if (n > 1) {
-    const dsri = divide(divide(latest('receivables'), latest('sales')), divide(previous('receivables'), previous('sales')));
-    const gmi = divide(grossMargin(n-2), grossMargin(n-1));
-    const aqi = divide(difference(1, divide(add(latest('netBlock'), currentAssets(n-1)), latest('assets'))),
-      difference(1, divide(add(previous('netBlock'), currentAssets(n-2)), previous('assets'))));
-    const sgi = divide(latest('sales'), previous('sales'));
-    const depi = divide(divide(previous('depreciation'), add(previous('depreciation'), previous('netBlock'))),
-      divide(latest('depreciation'), add(latest('depreciation'), latest('netBlock'))));
-    const sgai = divide(divide(latest('selling'), latest('sales')), divide(previous('selling'), previous('sales')));
-    const lvgi = divide(divide(liabilities(n-1), latest('assets')), divide(liabilities(n-2), previous('assets')));
-    const tata = divide(difference(latest('pat'), latest('cfo')), latest('assets'));
-    metrics['Beneish M-Score'] = [dsri,gmi,aqi,sgi,depi,sgai,lvgi,tata].every(v => v != null) ?
-      -4.84 + 0.92*dsri + 0.528*gmi + 0.404*aqi + 0.892*sgi + 0.115*depi - 0.172*sgai + 4.679*tata - 0.327*lvgi : null;
+  const beneish = calculateBeneish(parsed);
+  metrics['Beneish M-Score'] = beneish.value;
+  diagnostics['Beneish M-Score'] = beneish.diagnostic;
+  const needs = {
+    'CFO / PAT': ['pat','cfo'], Accruals: ['pat','cfo','assets'], 'Receivable days change': ['receivables','sales'],
+    'Other income share': ['otherIncome','pbt'], "Altman Z''": ['receivables','inventory','cash','liabilities','assets','reserves','pbt','interest','equity','borrowings'],
+    'Interest cover': ['pbt','interest'], 'Debt / Equity': ['borrowings','equity','reserves'],
+    ROE: ['pat','equity','reserves'], 'EBITDA margin trend': ['pbt','interest','depreciation','otherIncome','sales'],
+    'FCF / PAT': ['cfo','netBlock','cwip','depreciation','pat'], 'Dividend payout vs cash': ['dividend','cfo'],
+    'Cash / Borrowings': ['cash','borrowings']
+  };
+  const twoYears = new Set(['Receivable days change','EBITDA margin trend','FCF / PAT']);
+  for (const [name, value] of Object.entries(metrics)) if (value == null && !diagnostics[name]) {
+    const missingKey = needs[name]?.find(key => data[key]?.[n-1] == null);
+    const reason = twoYears.has(name) && n < 2 ? `Needs at least 2 years (found ${n})` :
+      missingKey ? `${rowNames[missingKey][0]} row missing` :
+      name === 'CFO / PAT' ? 'No year has positive net profit and operating cash data' :
+      name === 'FCF / PAT' ? 'Net profit must be positive and required capex data available' :
+      name === 'Dividend payout vs cash' ? 'Cash from Operating Activity must be positive' :
+      'A required denominator is zero';
+    diagnostics[name] = {skipReason: reason};
   }
-  return {metrics, extra: {receivableDays: daysNow, EBITDA: margin(n-1), capex, fcf}, lossMaking: data.pat.some(v => v != null && v <= 0)};
+  return {metrics, diagnostics, extra: {receivableDays: daysNow, EBITDA: margin(n-1), capex, fcf}, lossMaking: data.pat.some(v => v != null && v <= 0)};
+}
+
+function calculateBeneish({years, data, blankCells = {}}) {
+  const diagnostic = {notes: []};
+  if (years.length < 2) return {value: null, diagnostic: {skipReason: `Needs at least 2 years (found ${years.length})`}};
+  const core = ['sales','receivables','assets','netBlock','pat','cfo'];
+  const i = years.length - 1, j = i - 1;
+  for (const key of core) if (!data[key] || data[key][i] == null || data[key][j] == null)
+    return {value: null, diagnostic: {skipReason: `${rowNames[key][0]} row missing or has non-numeric data in the last two years`}};
+  const optional = ['raw','inventoryChange','power','manufacturing','selling','depreciation','borrowings','liabilities','inventory','cash'];
+  const get = (key, index) => {
+    const name = rowNames[key][0];
+    if (data[key]?.[index] != null) {
+      if (blankCells[key]?.[index] && !diagnostic.notes.includes(`${name} blank in ${years[index]}; estimated as 0.`))
+        diagnostic.notes.push(`${name} blank in ${years[index]}; estimated as 0.`);
+      return data[key][index];
+    }
+    if (!diagnostic.notes.includes(`${name} row missing; estimated as 0.`)) diagnostic.notes.push(`${name} row missing; estimated as 0.`);
+    return 0;
+  };
+  for (const key of optional) { get(key, i); get(key, j); }
+  const ratio = (a, b, name, reason) => {
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b === 0) {
+      diagnostic.notes.push(`${name} set to 1: ${reason || 'its denominator is zero'}.`);
+      return 1;
+    }
+    const value = a / b;
+    if (value > 3) {
+      diagnostic.notes.push(`${name} capped at 3: ${reason || 'the denominator was very small, making the ratio extreme'}.`);
+      return 3;
+    }
+    return value;
+  };
+  const intermediate = (a, b) => b === 0 ? 0 : a / b;
+  const sales = k => get('sales', k), assets = k => get('assets', k);
+  const gross = k => 1 - intermediate(get('raw',k)-get('inventoryChange',k)+get('power',k)+get('manufacturing',k),sales(k));
+  const current = k => get('receivables',k)+get('inventory',k)+get('cash',k);
+  const quality = k => 1 - intermediate(get('netBlock',k)+current(k),assets(k));
+  const depRate = k => intermediate(get('depreciation',k),get('depreciation',k)+get('netBlock',k));
+  const leverage = k => intermediate(get('borrowings',k)+get('liabilities',k),assets(k));
+  const dsri = ratio(intermediate(get('receivables',i),sales(i)),intermediate(get('receivables',j),sales(j)),'DSRI','prior-year receivables were very small, so the ratio is extreme');
+  const gmi = ratio(gross(j),gross(i),'GMI','current gross margin was zero or very small');
+  const aqi = ratio(quality(i),quality(j),'AQI','prior-year asset quality was zero or very small');
+  const sgi = ratio(sales(i),sales(j),'SGI','prior-year sales were zero or very small');
+  const depi = ratio(depRate(j),depRate(i),'DEPI','current depreciation rate was zero or very small');
+  const sgai = ratio(intermediate(get('selling',i),sales(i)),intermediate(get('selling',j),sales(j)),'SGAI','prior-year SG&A was zero or very small');
+  const lvgi = ratio(leverage(i),leverage(j),'LVGI','prior-year leverage was zero or very small');
+  const tata = ratio(get('pat',i)-get('cfo',i),assets(i),'TATA','current assets were zero');
+  const value = -4.84 + .92*dsri + .528*gmi + .404*aqi + .892*sgi + .115*depi - .172*sgai + 4.679*tata - .327*lvgi;
+  return {value, diagnostic};
 }
 
 function preferenceWeights(config, preferences) {
@@ -130,7 +198,7 @@ function score(result, config, preferences = Object.fromEntries(['holding', 'saf
     const items = Object.entries(definition.metrics).map(([metric, [bad, good]]) => {
       const value = result.metrics[metric];
       const points = value == null ? null : Math.max(0, Math.min(100, 100*(value-bad)/(good-bad)));
-      return {metric, value, points};
+      return {metric, value, points, diagnostic: result.diagnostics?.[metric]};
     });
     const available = items.filter(item => item.points != null);
     pillars.push({name, weight: weights[name], items,
@@ -173,13 +241,13 @@ function infoIcon(title, lines) {
   const content = lines.filter(Boolean).map(line => `<span>${escapeHtml(line)}</span>`).join('');
   return `<span class="info-wrap"><button type="button" class="info-icon" aria-label="About ${escapeHtml(title)}" aria-describedby="${id}">i</button><span class="info-tip" id="${id}" role="tooltip">${content}</span></span>`;
 }
-function metricTip(name, info, config) {
+function metricTip(name, info, config, diagnostic) {
   const text = info.metrics[name];
   const thresholds = Object.values(config.pillars).map(p => p.metrics[name]).find(Boolean);
   if (!text || !thresholds) return '';
   const [bad, good] = thresholds;
   const value = number => formatMetric(name === 'EBITDA margin trend' && number < 0 ? -number : number, text.format);
-  return infoIcon(name, [text.description, `Good: ${text.good.replace('{value}', value(good))}`, `Watch: ${text.watch.replace('{value}', value(bad))}`]);
+  return infoIcon(name, [text.description, `Good: ${text.good.replace('{value}', value(good))}`, `Watch: ${text.watch.replace('{value}', value(bad))}`, ...(diagnostic?.notes || []), diagnostic?.skipReason && `Skipped: ${diagnostic.skipReason}`]);
 }
 function trendChart(years, sales, profit) {
   const width = 620, height = 285, left = 58, right = 58, top = 30, bottom = 45;
@@ -287,7 +355,7 @@ function signalPanels(scores) {
 function render(parsed, result, scores, company, explanation, config, info, scroll = true) {
   const {pillars, composite, verdict} = scores;
   const bars = pillars.map(p => `<div class="pillar"><div><strong>${escapeHtml(p.name)}</strong>${infoIcon(p.name, [info.pillars[p.name]?.description, `High score: ${info.pillars[p.name]?.high}`, `Low score: ${info.pillars[p.name]?.low}`])}</div><div class="track"><span style="width:${p.score ?? 0}%"></span></div><b>${p.score == null ? '—' : Math.round(p.score)}</b></div>`).join('');
-  const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(item.metric)} ${metricTip(item.metric, info, config)}</td><td>${formatMetric(item.value, info.metrics[item.metric]?.format)}</td><td class="${scoreColor(item.points)}">${item.points == null ? 'Skipped' : Math.round(item.points)+'/100'}</td></tr>`)).join('');
+  const checks = pillars.flatMap(p => p.items.map(item => `<tr><td>${escapeHtml(parsed.years.length === 2 && / CAGR$/.test(item.metric) ? item.metric.replace('CAGR', '1-year growth') : item.metric)} ${metricTip(item.metric, info, config, item.diagnostic)}</td><td>${formatMetric(item.value, info.metrics[item.metric]?.format)}</td><td class="${scoreColor(item.points)}">${item.points == null ? `Skipped: ${escapeHtml(item.diagnostic?.skipReason || 'Required data unavailable')}` : Math.round(item.points)+'/100'}</td></tr>`)).join('');
   const weights = pillars.map(p => `${(p.weight*100).toFixed(1)}%`).join('/');
   const compositeTip = infoIcon('Composite Score', [info.composite.description.replace('{weights}', weights), `Good: ${info.composite.good.replace('{value}', config.verdict.invest)}`, `Watch: ${info.composite.watch.replace('{value}', config.verdict.watchlist)}`]);
   const weightsUsed = pillars.map(p => `<span>${escapeHtml(p.name)} ${(p.weight*100).toFixed(1)}%</span>`).join('');

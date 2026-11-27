@@ -2,7 +2,8 @@
   "name": "ipo-bot",
   "private": true,
   "scripts": {
-    "start": "node ai-service/server.js"
+    "start": "node ai-service/server.js",
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@google/genai": "^0.7.0"
