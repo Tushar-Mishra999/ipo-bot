@@ -209,6 +209,26 @@ function trendChart(years, sales, profit) {
   const labels = years.map((year,i) => `<text x="${x(i)}" y="${height-12}" text-anchor="middle" fill="#c6c9e1" font-size="11">${escapeHtml(year)}</text>`).join('');
   return `<div class="chart-legend"><span class="sales-dot"></span>Sales · left axis <span class="profit-dot"></span>Net profit · right axis</div><svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Sales bars on the left axis and net profit line on the right axis by year"><defs><linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#aa71ff"/><stop offset="1" stop-color="#6d48d3"/></linearGradient></defs>${ticks}${bars}${segments.join('')}${points}${labels}</svg>`;
 }
+function cashflowChart(years, cashflow, profit) {
+  cashflow = cashflow || [];
+  if (!cashflow.some(value => value != null)) return '<p>Operating cash flow is unavailable in this workbook.</p>';
+  const width = 620, height = 265, left = 58, right = 20, top = 24, bottom = 42;
+  const plotWidth = width-left-right, plotHeight = height-top-bottom;
+  const values = [...cashflow, ...profit].filter(value => value != null);
+  const low = Math.min(0, ...values), high = Math.max(0, ...values);
+  const padding = Math.max(1, (high-low)*0.12);
+  const min = low < 0 ? low-padding : 0, max = high > 0 ? high+padding : padding;
+  const y = value => top+(max-value)/(max-min)*plotHeight;
+  const zero = y(0);
+  const x = index => left+(index+0.5)*plotWidth/years.length;
+  const barWidth = Math.min(18, plotWidth/years.length*0.24);
+  const ticks = Array.from({length:5}, (_,index) => min+(max-min)*index/4).map(value =>
+    `<line x1="${left}" x2="${width-right}" y1="${y(value)}" y2="${y(value)}" stroke="${Math.abs(value)<0.0001?'#8792b2':'#364064'}" stroke-dasharray="4 5"/><text x="${left-8}" y="${y(value)+4}" text-anchor="end" fill="#bfc9e4" font-size="11">${Math.round(value).toLocaleString()}</text>`).join('');
+  const bars = years.map((year,index) => [[cashflow[index], '#72f6a1', -barWidth-2, 'Operating cash flow'], [profit[index], '#a578f0', 2, 'Net profit']].map(([value,color,offset,label]) => value == null ? '' :
+    `<rect x="${x(index)+offset}" y="${Math.min(y(value),zero)}" width="${barWidth}" height="${Math.max(1,Math.abs(zero-y(value)))}" rx="3" fill="${color}"><title>${escapeHtml(year)} ${label}: ${value.toLocaleString()}</title></rect>`).join('')).join('');
+  const labels = years.map((year,index) => `<text x="${x(index)}" y="${height-10}" text-anchor="middle" fill="#c6c9e1" font-size="11">${escapeHtml(year)}</text>`).join('');
+  return `<div class="cashflow-legend"><span style="background:#72f6a1"></span>Operating cash flow <span style="background:#a578f0;margin-left:10px"></span>Net profit</div><svg class="cashflow-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Grouped bars comparing operating cash flow and net profit by year">${ticks}<line x1="${left}" x2="${width-right}" y1="${zero}" y2="${zero}" stroke="#8792b2"/>${bars}${labels}</svg>`;
+}
 function scoreColor(points) {
   if (points == null) return 'muted';
   if (points >= 75) return 'good';
@@ -274,9 +294,10 @@ function render(parsed, result, scores, company, explanation, config, info, scro
   const shortContext = preferences.holding <= config.preferences.short_term.max_slider ? `<div class="short-context"><p class="short-notice">${escapeHtml(config.preferences.short_term.notice)}</p>${ipoContext(company)}</div>` : '';
   const sales = parsed.data.sales, pat = parsed.data.pat;
   const trends = trendChart(parsed.years, sales, pat);
+  const cashflowTrend = cashflowChart(parsed.years, parsed.data.cfo, pat);
   $('analysis').innerHTML = `<div class="analysis-head"><h2>${escapeHtml(company)} — IPO Analysis</h2><span>${escapeHtml(parsed.years[0])}–${escapeHtml(parsed.years.at(-1))} · ${parsed.years.length} years</span></div>
     <div class="score-grid"><div class="verdict ${verdict.toLowerCase().replace(' ','-')}"><div class="verdict-text"><small>Verdict</small><strong>${escapeHtml(verdict)}</strong><div class="scored-for">Scored for: ${escapeHtml(preferenceSummary())}</div><div class="weight-list" aria-label="Weights used"><b>Weights used:</b>${weightsUsed}</div><div class="education-note">${escapeHtml(config.preferences.education_note)}</div></div><div class="gauge"><svg viewBox="0 0 200 120" aria-hidden="true"><path class="gauge-bg" d="M 20 95 A 80 80 0 0 1 180 95"/><path class="gauge-value" d="M 20 95 A 80 80 0 0 1 180 95" style="stroke-dasharray:${composite == null ? 0 : Math.max(0,Math.min(100,composite))*2.513} 252"/></svg><div class="gauge-score"><b>${composite == null ? '—' : Math.round(composite)}</b><span>/100</span></div><small>Composite Score ${compositeTip}</small></div>${shortContext}</div><section class="ai-card"><h3>AI Analysis</h3><p id="ai-explanation">${escapeHtml(explanation)}</p></section></div>${signalPanels(scores)}<div class="pillars pillar-grid">${bars}</div>
-    <div class="detail-grid"><section><h3>Key Financial Trends</h3>${trends}</section>
+    <div class="detail-grid"><section><h3>Key Financial Trends</h3>${trends}<h4 class="trend-subhead">Cash from operations vs net profit</h4>${cashflowTrend}</section>
     <section><h3>Forensic & Quality Checks</h3><table><thead><tr><th>Metric</th><th>Value</th><th>Score</th></tr></thead><tbody>${checks}</tbody></table>${result.lossMaking ? '<p class="warning">Loss making year found. CFO / PAT excludes years with zero or negative PAT.</p>' : ''}</section></div>`;
   $('analysis').hidden = false;
   if (scroll) $('analysis').scrollIntoView({behavior:'smooth', block:'start'});
