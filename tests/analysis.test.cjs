@@ -68,3 +68,12 @@ test('an extreme index is capped with a named warning', () => {
   const result = analyze(rows);
   assert.match(result.diagnostics['Beneish M-Score'].notes.join(' '), /DSRI capped at 3/);
 });
+
+for (const [file, reference] of [['Jio Platforms.xlsx', -3.00], ['Shree Siddhivinayak Greentech.xlsx', -0.12]]) test(`${file}: M-Score`, () => {
+  const rows = samples[file];
+  const parsed = vm.runInContext('parseWorkbook(workbook)', Object.assign(context, {workbook: {Sheets: {'Data Sheet': {rows}}}}));
+  const result = analyze(rows);
+  assert.ok(parsed.years.length >= 2);
+  assert.ok(Math.abs(result.metrics['Beneish M-Score'] - reference) < 0.05);
+  assert.equal(result.diagnostics['Beneish M-Score'].skipReason, undefined);
+});
